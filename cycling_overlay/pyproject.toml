@@ -1,0 +1,35 @@
+[project]
+name = "cycling-overlay"
+version = "0.1.0"
+description = "Overlay de treino para ciclismo indoor"
+license = { text = "GPL-3.0-only" }
+requires-python = ">=3.11"
+dependencies = [
+    "customtkinter>=5.2",
+    "pydantic>=2.7",
+    "platformdirs>=4.2",
+    "bleak>=0.22",
+    "requests>=2.31",
+    "websocket-client>=1.8",
+    "paho-mqtt>=2.1",
+    "zeroconf>=0.132",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+]
+
+[project.scripts]
+cycling-overlay = "app.main:main"
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
