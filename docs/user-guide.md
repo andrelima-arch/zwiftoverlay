@@ -1,4 +1,125 @@
-# Guia do usuário / User Guide
+# User Guide / Guia do Usuário
+
+## English
+
+### What It Is
+
+Cycling Overlay is a desktop app for indoor cycling workouts. It shows an
+always-on-top overlay with power, cadence, heart rate, interval target, watts per
+kilogram, and workout progress.
+
+The app can read BLE sensors, QDomyos-Zwift (QZ) data through Wi-Fi/DIRCON or
+MQTT, and workouts from Intervals.icu text, the Intervals.icu API, or Zwift
+`.zwo` files.
+
+### Requirements
+
+- Python 3.11 or newer.
+- `pip` available in the Python installation.
+- Bluetooth enabled for BLE sensors.
+- Local network access when using QZ Wi-Fi/DIRCON or QZ MQTT.
+
+### Install and Run
+
+On first run, start the installer:
+
+```bash
+python setup.py
+```
+
+To open with a debug terminal:
+
+```bash
+python run.py
+```
+
+On Windows, to open without a terminal:
+
+```bash
+python run.pyw
+```
+
+The launcher checks the Python version, installs dependencies with `pip install
+-e cycling_overlay` when needed, and keeps a local `.deps_checked` cache to avoid
+reinstalling dependencies too often.
+
+### Interface Language
+
+The interface starts in English by default. Use the `PT` button at the top of the
+window to switch to Portuguese. When the interface is in Portuguese, the button
+shows `EN`.
+
+The selected language is saved in the user's local `config.json`. Data received
+from sensors, workouts, Intervals.icu, QZ, and device names is not translated
+automatically.
+
+### Athlete Profile
+
+The athlete panel supports two sources:
+
+- `Manual`: weight and FTP entered by the user.
+- `Intervals.icu`: weight and FTP synchronized with API Key and Athlete ID.
+
+To use Intervals.icu, enter the API Key and Athlete ID, then save. If the API
+does not return weight or FTP, the app keeps the available configuration and
+shows a status message.
+
+### Loading Workouts
+
+In the workout tab, choose a source:
+
+- `Test workout`: built-in workout for testing the overlay.
+- `Paste intervals.icu text`: paste workout text and analyze it.
+- `Fetch from intervals.icu`: fetch upcoming events using the saved API Key and
+  Athlete ID.
+- `Load ZWO folder`: select a folder and list Zwift `.zwo` files.
+
+The app uses the current FTP to convert percentage-based workout power into
+watts when the workout format requires it.
+
+### BLE Sensors
+
+In the sensors tab:
+
+1. Click scan sensors.
+2. Click an available device to connect.
+3. Click a connected device to disconnect.
+
+The app recognizes heart rate, power, cadence/speed, and FTMS smart trainer
+sensors. Known devices and selected sensors are saved in the local configuration.
+
+### QZ Wi-Fi/DIRCON and MQTT
+
+In the advanced QZ tab:
+
+- Enable automatic QZ Wi-Fi to discover DIRCON devices on the network.
+- Use manual DIRCON connection with host and port when automatic discovery does
+  not find the device.
+- Enable QZ MQTT to receive metrics published by QDomyos-Zwift.
+
+Values such as host, port, username, password, and MQTT device/topic are saved
+in the local `config.json`.
+
+### Overlay
+
+When a workout starts, the overlay appears on top of the screen. It can be
+dragged with the mouse. During the workout, it shows current metrics, interval
+target, watts per kilogram, and the current or next interval name.
+
+### Configuration and Sensitive Data
+
+Settings are saved in a `config.json` file in the user config directory resolved
+by `platformdirs`. This file is outside the repository, but it may contain
+sensitive data:
+
+- Intervals.icu API Key.
+- Athlete ID.
+- MQTT username and password.
+- Local network hosts and ports.
+- Saved sensors.
+
+Do not commit this file to GitHub, do not share logs with secrets, and remove
+credentials before attaching files to issues.
 
 ## Português
 
@@ -121,124 +242,3 @@ pode conter dados sensíveis:
 
 Não envie esse arquivo ao GitHub, não compartilhe logs com segredos e remova
 credenciais antes de anexar arquivos em issues.
-
-## English
-
-### What It Is
-
-Cycling Overlay is a desktop app for indoor cycling workouts. It shows an
-always-on-top overlay with power, cadence, heart rate, interval target, watts per
-kilogram, and workout progress.
-
-The app can read BLE sensors, QDomyos-Zwift (QZ) data through Wi-Fi/DIRCON or
-MQTT, and workouts from Intervals.icu text, the Intervals.icu API, or Zwift
-`.zwo` files.
-
-### Requirements
-
-- Python 3.11 or newer.
-- `pip` available in the Python installation.
-- Bluetooth enabled for BLE sensors.
-- Local network access when using QZ Wi-Fi/DIRCON or QZ MQTT.
-
-### Install and Run
-
-On first run, start the installer:
-
-```bash
-python setup.py
-```
-
-To open with a debug terminal:
-
-```bash
-python run.py
-```
-
-On Windows, to open without a terminal:
-
-```bash
-python run.pyw
-```
-
-The launcher checks the Python version, installs dependencies with `pip install
--e cycling_overlay` when needed, and keeps a local `.deps_checked` cache to avoid
-reinstalling dependencies too often.
-
-### Interface Language
-
-The interface starts in English by default. Use the `PT` button at the top of the
-window to switch to Portuguese. When the interface is in Portuguese, the button
-shows `EN`.
-
-The selected language is saved in the user's local `config.json`. Data received
-from sensors, workouts, Intervals.icu, QZ, and device names is not translated
-automatically.
-
-### Athlete Profile
-
-The athlete panel supports two sources:
-
-- `Manual`: weight and FTP entered by the user.
-- `Intervals.icu`: weight and FTP synchronized with API Key and Athlete ID.
-
-To use Intervals.icu, enter the API Key and Athlete ID, then save. If the API
-does not return weight or FTP, the app keeps the available configuration and
-shows a status message.
-
-### Loading Workouts
-
-In the workout tab, choose a source:
-
-- `Test workout`: built-in workout for testing the overlay.
-- `Paste intervals.icu text`: paste workout text and analyze it.
-- `Fetch from intervals.icu`: fetch upcoming events using the saved API Key and
-  Athlete ID.
-- `Load ZWO folder`: select a folder and list Zwift `.zwo` files.
-
-The app uses the current FTP to convert percentage-based workout power into
-watts when the workout format requires it.
-
-### BLE Sensors
-
-In the sensors tab:
-
-1. Click scan sensors.
-2. Click an available device to connect.
-3. Click a connected device to disconnect.
-
-The app recognizes heart rate, power, cadence/speed, and FTMS smart trainer
-sensors. Known devices and selected sensors are saved in the local configuration.
-
-### QZ Wi-Fi/DIRCON and MQTT
-
-In the advanced QZ tab:
-
-- Enable automatic QZ Wi-Fi to discover DIRCON devices on the network.
-- Use manual DIRCON connection with host and port when automatic discovery does
-  not find the device.
-- Enable QZ MQTT to receive metrics published by QDomyos-Zwift.
-
-Values such as host, port, username, password, and MQTT device/topic are saved
-in the local `config.json`.
-
-### Overlay
-
-When a workout starts, the overlay appears on top of the screen. It can be
-dragged with the mouse. During the workout, it shows current metrics, interval
-target, watts per kilogram, and the current or next interval name.
-
-### Configuration and Sensitive Data
-
-Settings are saved in a `config.json` file in the user config directory resolved
-by `platformdirs`. This file is outside the repository, but it may contain
-sensitive data:
-
-- Intervals.icu API Key.
-- Athlete ID.
-- MQTT username and password.
-- Local network hosts and ports.
-- Saved sensors.
-
-Do not commit this file to GitHub, do not share logs with secrets, and remove
-credentials before attaching files to issues.

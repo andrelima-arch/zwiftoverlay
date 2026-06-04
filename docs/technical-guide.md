@@ -1,4 +1,134 @@
-# Guia técnico / Technical Guide
+# Technical Guide / Guia Técnico
+
+## English
+
+### Overview
+
+Cycling Overlay is a Python application packaged under the `cycling_overlay`
+directory. The setup UI uses `customtkinter`, and the overlay uses `tkinter`.
+`pyproject.toml` declares the `cycling-overlay` command, in addition to the root
+launchers `setup.py`, `run.py`, and `run.pyw`. In the current code, the root
+launchers are the verified startup path.
+
+### Main Structure
+
+- `cycling_overlay/main.py`: creates the app, connects signals, and coordinates
+  the main window, sensors, state, workout engine, and overlay.
+- `app/ui/main_window.py`: setup window, profile, workout, sensor, and QZ tabs.
+- `app/ui/overlay_window.py`: always-on-top overlay displayed during workouts.
+- `app/ui/workout_loader.py`: workout sources, Intervals.icu, and `.zwo` files.
+- `app/ui/sensor_selector.py`: scan, selection, and visual sensor status.
+- `app/core/config_manager.py`: local settings persistence.
+- `app/core/workout_engine.py`: interval execution and progress.
+- `app/core/state_manager.py`: aggregated state sent to the overlay.
+- `app/sensors/`: BLE, QZ WebSocket, QZ Wi-Fi/DIRCON, and QZ MQTT.
+- `app/intervals_icu/`: client, profile sync, and workout conversion.
+- `app/workouts/`: text and `.zwo` parsers.
+
+### Runtime Flow
+
+1. `CyclingOverlayApp` initializes `ConfigManager`, `StateManager`,
+   `WorkoutEngine`, `SensorReader`, `OverlayWindow`, and `MainWindow`.
+2. `MainWindow` saves preferences, selects workout and sensors, and emits
+   signals to start/stop workouts or change the UI language.
+3. `SensorReader` aggregates data from BLE, QZ Wi-Fi/DIRCON, QZ MQTT, and QZ
+   WebSocket.
+4. `WorkoutEngine` receives the selected workout and advances intervals based on
+   time, pauses, and sensor data.
+5. `StateManager` combines profile, sensors, and current interval.
+6. `OverlayWindow` renders the final state for the user.
+
+### Configuration
+
+`ConfigManager` uses `platformdirs.user_config_dir("cycling-overlay")` to create
+the user's configuration directory and save `config.json`.
+
+Persisted fields include:
+
+- `ui_language`: `en` or `pt`, with fallback to `en`.
+- Manual and Intervals.icu profile: weight, FTP, and active source.
+- `intervals_api_key` and `intervals_athlete_id`.
+- Last `.zwo` folder.
+- Overlay position.
+- Selected sensors and known BLE devices.
+- QZ WebSocket, QZ Wi-Fi/DIRCON, and QZ MQTT settings.
+
+This file is local and must not be versioned. It may contain secrets.
+
+### Internationalization
+
+Fixed interface text lives in `app/ui/i18n.py`. The `t(language, key, **params)`
+helper resolves translations, and `normalize_language` applies fallback. The
+default language is English.
+
+Translation covers text created by the interface. API data, sensor data, device
+names, workout names, and external messages remain unchanged.
+
+### Sensors and Integrations
+
+The app uses `bleak` for BLE and recognizes heart rate, power, cadence/speed,
+and FTMS services. The compatibility layer adds identification and fallback
+parsing for compatible equipment.
+
+QZ can be used through:
+
+- Wi-Fi/DIRCON with mDNS discovery through `zeroconf`.
+- Manual DIRCON connection by host and port.
+- MQTT through `paho-mqtt`.
+- Legacy internal WebSocket support kept in the sensor layer.
+
+Intervals.icu uses `requests` with basic authentication `("API_KEY", api_key)`
+and fetches profile, upcoming events, and workout documents.
+
+### Useful Commands
+
+Install dependencies in editable mode:
+
+```bash
+python setup.py
+```
+
+Run with terminal:
+
+```bash
+python run.py
+```
+
+Run without terminal on Windows:
+
+```bash
+python run.pyw
+```
+
+Run directly from the package directory:
+
+```bash
+cd cycling_overlay
+python main.py
+```
+
+The `cycling-overlay` command is declared in `pyproject.toml`, but it points to
+`app.main:main`. Since the current code has `main.py` under the `cycling_overlay`
+directory, validate this entrypoint before relying on it for packaging or
+distribution.
+
+Run tests:
+
+```bash
+cd cycling_overlay
+.venv/bin/python -m pytest
+```
+
+### Security Before Publishing
+
+Before pushing to GitHub, verify that local credential files were not added:
+
+- User `config.json`.
+- Error logs containing API Key, Athlete ID, or MQTT password.
+- Virtual environments, caches, and local artifacts.
+
+The repository includes a root `.gitignore` for common local files, but review
+the staged diff before publishing.
 
 ## Português
 
@@ -130,135 +260,5 @@ foram adicionados:
 - Logs de erro com API Key, Athlete ID ou senha MQTT.
 - Ambientes virtuais, caches e artefatos locais.
 
-O diretório atual não possui `.git`; inicializar ou conectar o repositório deve
-ser feito separadamente antes do primeiro push.
-
-## English
-
-### Overview
-
-Cycling Overlay is a Python application packaged under the `cycling_overlay`
-directory. The setup UI uses `customtkinter`, and the overlay uses `tkinter`.
-`pyproject.toml` declares the `cycling-overlay` command, in addition to the root
-launchers `setup.py`, `run.py`, and `run.pyw`. In the current code, the root
-launchers are the verified startup path.
-
-### Main Structure
-
-- `cycling_overlay/main.py`: creates the app, connects signals, and coordinates
-  the main window, sensors, state, workout engine, and overlay.
-- `app/ui/main_window.py`: setup window, profile, workout, sensor, and QZ tabs.
-- `app/ui/overlay_window.py`: always-on-top overlay displayed during workouts.
-- `app/ui/workout_loader.py`: workout sources, Intervals.icu, and `.zwo` files.
-- `app/ui/sensor_selector.py`: scan, selection, and visual sensor status.
-- `app/core/config_manager.py`: local settings persistence.
-- `app/core/workout_engine.py`: interval execution and progress.
-- `app/core/state_manager.py`: aggregated state sent to the overlay.
-- `app/sensors/`: BLE, QZ WebSocket, QZ Wi-Fi/DIRCON, and QZ MQTT.
-- `app/intervals_icu/`: client, profile sync, and workout conversion.
-- `app/workouts/`: text and `.zwo` parsers.
-
-### Runtime Flow
-
-1. `CyclingOverlayApp` initializes `ConfigManager`, `StateManager`,
-   `WorkoutEngine`, `SensorReader`, `OverlayWindow`, and `MainWindow`.
-2. `MainWindow` saves preferences, selects workout and sensors, and emits
-   signals to start/stop workouts or change the UI language.
-3. `SensorReader` aggregates data from BLE, QZ Wi-Fi/DIRCON, QZ MQTT, and QZ
-   WebSocket.
-4. `WorkoutEngine` receives the selected workout and advances intervals based on
-   time, pauses, and sensor data.
-5. `StateManager` combines profile, sensors, and current interval.
-6. `OverlayWindow` renders the final state for the user.
-
-### Configuration
-
-`ConfigManager` uses `platformdirs.user_config_dir("cycling-overlay")` to create
-the user's configuration directory and save `config.json`.
-
-Persisted fields include:
-
-- `ui_language`: `en` or `pt`, with fallback to `en`.
-- Manual and Intervals.icu profile: weight, FTP, and active source.
-- `intervals_api_key` and `intervals_athlete_id`.
-- Last `.zwo` folder.
-- Overlay position.
-- Selected sensors and known BLE devices.
-- QZ WebSocket, QZ Wi-Fi/DIRCON, and QZ MQTT settings.
-
-This file is local and must not be versioned. It may contain secrets.
-
-### Internationalization
-
-Fixed interface text lives in `app/ui/i18n.py`. The `t(language, key, **params)`
-helper resolves translations, and `normalize_language` applies fallback. The
-default language is English.
-
-Translation covers text created by the interface. API data, sensor data, device
-names, workout names, and external messages remain unchanged.
-
-### Sensors and Integrations
-
-The app uses `bleak` for BLE and recognizes heart rate, power, cadence/speed,
-and FTMS services. The compatibility layer adds identification and fallback
-parsing for compatible equipment.
-
-QZ can be used through:
-
-- Wi-Fi/DIRCON with mDNS discovery through `zeroconf`.
-- Manual DIRCON connection by host and port.
-- MQTT through `paho-mqtt`.
-- Legacy internal WebSocket support kept in the sensor layer.
-
-Intervals.icu uses `requests` with basic authentication `("API_KEY", api_key)`
-and fetches profile, upcoming events, and workout documents.
-
-### Useful Commands
-
-Install dependencies in editable mode:
-
-```bash
-python setup.py
-```
-
-Run with terminal:
-
-```bash
-python run.py
-```
-
-Run without terminal on Windows:
-
-```bash
-python run.pyw
-```
-
-Run directly from the package directory:
-
-```bash
-cd cycling_overlay
-python main.py
-```
-
-The `cycling-overlay` command is declared in `pyproject.toml`, but it points to
-`app.main:main`. Since the current code has `main.py` under the `cycling_overlay`
-directory, validate this entrypoint before relying on it for packaging or
-distribution.
-
-Run tests:
-
-```bash
-cd cycling_overlay
-.venv/bin/python -m pytest
-```
-
-### Security Before Publishing
-
-Before pushing to GitHub, verify that local credential files were not added:
-
-- User `config.json`.
-- Error logs containing API Key, Athlete ID, or MQTT password.
-- Virtual environments, caches, and local artifacts.
-
-The current directory does not contain `.git`; initializing or connecting the
-repository must be handled separately before the first push.
+O repositório inclui um `.gitignore` na raiz para arquivos locais comuns, mas
+revise o diff staged antes da publicação.
