@@ -1,3 +1,6 @@
+<a href="https://www.buymeacoffee.com/andrelimarch" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 50px !important;width: 217px !important;" ></a>
+<a href='https://ko-fi.com/E8G020T9M3' target='_blank'><img height='60' style='border:0px;height:50px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 # Cycling Overlay
 
 ## English
