@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.core.events import Signal
@@ -103,3 +104,66 @@ def test_workout_loader_rebuilds_current_text_workout_for_new_ftp():
     assert workout is not None
     assert workout.intervals[0].power_min == 150
     assert loader._current_workout == workout
+
+
+def test_workout_loader_intervals_buttons_align_text_left(monkeypatch):
+    created = []
+
+    class FakeButton:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+            created.append(self)
+
+        def pack(self, **_kwargs):
+            pass
+
+    loader = object.__new__(WorkoutLoader)
+    loader._language = "en"
+    loader._fetch_button = SimpleNamespace(configure=lambda **_kwargs: None)
+    loader._api_status_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    loader._events_frame = SimpleNamespace(winfo_children=lambda: [])
+    monkeypatch.setattr("app.ui.workout_loader.ctk.CTkButton", FakeButton)
+
+    WorkoutLoader._show_events(
+        loader,
+        [
+            {
+                "id": "1",
+                "name": "Endurance",
+                "start_date_local": "2026-06-05T10:00:00",
+                "workout_doc": {},
+            }
+        ],
+    )
+
+    assert created[0].kwargs["anchor"] == "w"
+
+
+def test_workout_loader_zwo_buttons_align_text_left(monkeypatch):
+    created = []
+
+    class FakeButton:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+            created.append(self)
+
+        def pack(self, **_kwargs):
+            pass
+
+    loader = object.__new__(WorkoutLoader)
+    loader._language = "en"
+    loader._zwo_files = []
+    loader._zwo_folder_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    loader._zwo_status_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    loader._zwo_list_frame = SimpleNamespace(winfo_children=lambda: [])
+    monkeypatch.setattr("app.ui.workout_loader.ctk.CTkButton", FakeButton)
+    monkeypatch.setattr(
+        "app.ui.workout_loader.find_zwo_files",
+        lambda _folder: [Path("/tmp/base.zwo")],
+    )
+
+    WorkoutLoader._load_zwo_folder(loader, "/tmp")
+
+    assert created[0].kwargs["anchor"] == "w"

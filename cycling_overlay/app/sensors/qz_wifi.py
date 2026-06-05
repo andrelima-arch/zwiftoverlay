@@ -7,6 +7,7 @@ import re
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -14,6 +15,7 @@ from app.core.events import Signal
 from app.sensors.qz_dircon import DirconDevice
 from app.sensors.qz_dircon import DirconMdnsScanner
 from app.sensors.qz_dircon import DirconTcpClient
+from app.sensors.qz_dircon import QZ_DIRCON_VIRTUAL_PORTS
 from app.sensors.qz_dircon import is_zeroconf_available
 from app.sensors.qz_websocket import DEFAULT_QZ_WS_PORT
 from app.sensors.qz_websocket import parse_qz_workout_event
@@ -26,6 +28,13 @@ PROFORM_TELNET_PORT = 23
 PROFORM_WEBSOCKET_PORT = 80
 SCAN_CONNECT_TIMEOUT_SECONDS = 0.25
 QZ_DIRCON_SERVICE_TYPE = "qz_dircon"
+QZ_WEBSOCKET_SERVICE_TYPE = "qz_websocket"
+QZ_DIRCON_FALLBACK_NAMES = {
+    36866: "QZ Wahoo KICKR",
+    36867: "QZ Wahoo HRM",
+    36868: "QZ Wahoo CSC",
+    36869: "QZ Wahoo Power",
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +65,20 @@ class NetworkSensorDevice:
             services=list(device.service_uuids),
             compatibility_hint="QZ Wi-Fi / Wahoo DIRCON",
             compatibility_profile="qz_dircon",
+        )
+
+    @classmethod
+    def from_qz_websocket(cls, host: str, port: int = DEFAULT_QZ_WS_PORT) -> "NetworkSensorDevice":
+        address = f"qz-ws:{host}:{port}"
+        return cls(
+            address=address,
+            name=f"QZ Android {host}",
+            service_type=QZ_WEBSOCKET_SERVICE_TYPE,
+            host=host,
+            port=port,
+            source_type=QZ_WEBSOCKET_SERVICE_TYPE,
+            compatibility_hint="QZ Wi-Fi / Android app",
+            compatibility_profile="qz_websocket",
         )
 
     @property
@@ -138,11 +161,42 @@ class NetworkDeviceScanner:
         network = ipaddress.ip_network(f"{ip}/24", strict=False)
         return [str(host) for host in network.hosts() if str(host) != ip]
 
-    def reachable_hosts(self, ports: tuple[int, ...] = (PROFORM_WEBSOCKET_PORT, PROFORM_TELNET_PORT)) -> list[str]:
+    def reachable_hosts(
+        self,
+        ports: tuple[int, ...] = (PROFORM_WEBSOCKET_PORT, PROFORM_TELNET_PORT),
+        hosts: list[str] | None = None,
+    ) -> list[str]:
         found: list[str] = []
-        for host in self.local_subnet_hosts():
-            if any(self._is_port_open(host, port) for port in ports):
+        for host, _port in self.reachable_endpoints(ports, hosts=hosts):
+            if host not in found:
                 found.append(host)
+        return found
+
+    def reachable_endpoints(
+        self,
+        ports: tuple[int, ...],
+        hosts: list[str] | None = None,
+    ) -> list[tuple[str, int]]:
+        candidates = hosts if hosts is not None else self.local_subnet_hosts()
+        probes = [(host, port) for host in candidates for port in ports]
+        if not probes:
+            return []
+        found: list[tuple[str, int]] = []
+        max_workers = min(64, len(probes))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self._is_port_open, host, port): (host, port)
+                for host, port in probes
+            }
+            for future in as_completed(futures):
+                host, port = futures[future]
+                try:
+                    reachable = future.result()
+                except OSError:
+                    reachable = False
+                if reachable:
+                    found.append((host, port))
+        found.sort(key=lambda item: (tuple(int(part) for part in item[0].split(".") if part.isdigit()), item[1]))
         return found
 
     def _local_ip(self) -> str:
@@ -174,10 +228,18 @@ class QzWifiWorker:
         self._dircon_client: DirconTcpClient | None = None
         self._dircon_devices: dict[str, DirconDevice] = {}
         self._pending_dircon_device: DirconDevice | None = None
+        self._pending_qz_websocket: tuple[str, int] | None = None
         self._thread_lock = threading.Lock()
+        self._last_dircon_discovery_count = 0
 
     def start_auto_scan(self) -> None:
-        self.start_discovery()
+        with self._thread_lock:
+            if self._thread and self._thread.is_alive():
+                self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "QZ Wi-Fi ocupado; scan em andamento")
+                return
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._run_auto_scan, daemon=True)
+            self._thread.start()
 
     def start_discovery(self) -> None:
         with self._thread_lock:
@@ -214,6 +276,25 @@ class QzWifiWorker:
             )
         )
 
+    def connect_qz_websocket(self, details: dict[str, Any]) -> None:
+        host = str(details.get("host") or "").strip()
+        try:
+            port = int(details.get("port") or DEFAULT_QZ_WS_PORT)
+        except (TypeError, ValueError):
+            port = DEFAULT_QZ_WS_PORT
+        if not host:
+            self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "Error: QZ Android host inválido")
+            return
+        with self._thread_lock:
+            if self._thread and self._thread.is_alive():
+                self._pending_qz_websocket = (host, port)
+                self.connection_status.emit_safe(f"qz-ws:{host}:{port}", "Queued...")
+                self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "QZ Wi-Fi ocupado; conexão enfileirada")
+                return
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._run_qz_websocket_client, args=(host, port), daemon=True)
+            self._thread.start()
+
     def stop(self) -> None:
         self._stop_event.set()
         app = self._app
@@ -232,6 +313,7 @@ class QzWifiWorker:
         self._app = None
         self._dircon_client = None
         self._pending_dircon_device = None
+        self._pending_qz_websocket = None
         self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "Disconnected")
 
     def _start_dircon_thread_locked(self, device: DirconDevice) -> None:
@@ -239,85 +321,123 @@ class QzWifiWorker:
         self._thread = threading.Thread(target=self._run_dircon_client, args=(device,), daemon=True)
         self._thread.start()
 
-    def _run_discovery(self) -> None:
+    def _run_discovery(self, *, terminal_failures: bool = True, finish_thread: bool = True) -> bool:
         try:
             self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "Scanning QZ DIRCON/Wi-Fi devices...")
+            self._last_dircon_discovery_count = 0
             if not is_zeroconf_available():
-                self.connection_status.emit_safe(
-                    QZ_WIFI_SOURCE_ID,
-                    "QZ Wi-Fi indisponível: zeroconf não instalado",
+                message = (
+                    "QZ Wi-Fi indisponível: zeroconf não instalado"
+                    if terminal_failures
+                    else "QZ mDNS indisponível; procurando QZ Android por Wi-Fi..."
                 )
-                return
+                self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, message)
+                return False
 
             try:
                 devices = DirconMdnsScanner().discover()
             except Exception as exc:
                 logger.warning("QZ DIRCON mDNS discovery failed: %s", exc)
-                self.connection_status.emit_safe(
-                    QZ_WIFI_SOURCE_ID,
-                    f"QZ Wi-Fi erro na descoberta mDNS: {exc}",
+                message = (
+                    f"QZ Wi-Fi erro na descoberta mDNS: {exc}"
+                    if terminal_failures
+                    else f"QZ mDNS falhou; procurando QZ Android por Wi-Fi: {exc}"
                 )
-                return
+                self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, message)
+                return False
             if devices:
                 for device in devices:
                     if self._stop_event.is_set():
-                        return
+                        return False
                     self._dircon_devices[device.source_id] = device
                     self.device_found.emit_safe(NetworkSensorDevice.from_dircon(device))
+                self._last_dircon_discovery_count = len(devices)
                 self.connection_status.emit_safe(
                     QZ_WIFI_SOURCE_ID,
                     f"QZ DIRCON encontrado: {len(devices)} fonte(s) disponível(is)",
                 )
-                return
+                return True
 
-            self.connection_status.emit_safe(
-                QZ_WIFI_SOURCE_ID,
-                "mDNS não encontrou QZ; verifique mesma rede/firewall/DIRCON ativo",
+            message = (
+                "mDNS não encontrou QZ; verifique mesma rede/firewall/DIRCON ativo"
+                if terminal_failures
+                else "mDNS não encontrou QZ; procurando QZ Android por Wi-Fi..."
             )
+            self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, message)
+            return False
         finally:
-            self._start_pending_dircon_if_needed()
+            if finish_thread:
+                self._start_pending_dircon_if_needed()
 
     def _run_auto_scan(self) -> None:
-        self._run_discovery()
-        if self._stop_event.is_set():
-            return
-
-        scanner = NetworkDeviceScanner()
-        for host in self._qz_websocket_hosts(scanner):
+        try:
+            found_qz_count = 0
+            found_dircon = self._run_discovery(terminal_failures=False, finish_thread=False)
+            if found_dircon:
+                found_qz_count += self._last_dircon_discovery_count
             if self._stop_event.is_set():
                 return
-            if self._try_qz_websocket(host):
+
+            scanner = NetworkDeviceScanner()
+            qz_hosts = self._qz_websocket_hosts(scanner)
+            for host in qz_hosts:
+                if self._stop_event.is_set():
+                    return
+                self.device_found.emit_safe(NetworkSensorDevice.from_qz_websocket(host))
+                found_qz_count += 1
+
+            if not found_dircon:
+                for device in self._qz_dircon_fallback_devices(scanner):
+                    if self._stop_event.is_set():
+                        return
+                    self._dircon_devices[device.source_id] = device
+                    self.device_found.emit_safe(NetworkSensorDevice.from_dircon(device))
+                    found_qz_count += 1
+
+            if found_qz_count:
+                self.connection_status.emit_safe(
+                    QZ_WIFI_SOURCE_ID,
+                    f"QZ Wi-Fi encontrado: {found_qz_count} fonte(s) disponível(is)",
+                )
                 return
 
-        self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "Scanning direct equipment Wi-Fi...")
-        for host in scanner.reachable_hosts():
-            if self._stop_event.is_set():
-                return
-            if self._try_proform_websocket(host):
-                return
-            if self._try_proform_telnet(host):
-                return
-        if not self._stop_event.is_set():
-            self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "No compatible QZ/Wi-Fi device found")
+            self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "Scanning direct equipment Wi-Fi...")
+            for host in scanner.reachable_hosts():
+                if self._stop_event.is_set():
+                    return
+                if self._try_proform_websocket(host):
+                    return
+                if self._try_proform_telnet(host):
+                    return
+            if not self._stop_event.is_set():
+                self.connection_status.emit_safe(QZ_WIFI_SOURCE_ID, "No compatible QZ/Wi-Fi device found")
+        finally:
+            self._start_pending_dircon_if_needed()
 
     def _run_dircon_client(self, device: DirconDevice) -> None:
         try:
             self._dircon_devices[device.source_id] = device
             self._try_qz_dircon(device)
         finally:
-            with self._thread_lock:
-                if self._thread is threading.current_thread():
-                    self._thread = None
+            self._start_pending_dircon_if_needed()
 
     def _start_pending_dircon_if_needed(self) -> None:
         with self._thread_lock:
-            pending = self._pending_dircon_device
+            pending_dircon = self._pending_dircon_device
+            pending_qz_websocket = self._pending_qz_websocket
             self._pending_dircon_device = None
+            self._pending_qz_websocket = None
             if self._thread is threading.current_thread():
                 self._thread = None
-            if pending is None or self._stop_event.is_set():
+            if self._stop_event.is_set():
                 return
-            self._start_dircon_thread_locked(pending)
+            if pending_dircon is not None:
+                self._start_dircon_thread_locked(pending_dircon)
+                return
+            if pending_qz_websocket is not None:
+                host, port = pending_qz_websocket
+                self._thread = threading.Thread(target=self._run_qz_websocket_client, args=(host, port), daemon=True)
+                self._thread.start()
 
     def _dircon_device_from_details(self, details: dict[str, Any]) -> DirconDevice | None:
         source_id = str(details.get("source_id") or details.get("address") or "")
@@ -342,11 +462,31 @@ class QzWifiWorker:
         )
 
     def _qz_websocket_hosts(self, scanner: NetworkDeviceScanner) -> list[str]:
-        hosts = ["127.0.0.1", "localhost"]
+        hosts: list[str] = []
         for host in scanner.reachable_hosts((DEFAULT_QZ_WS_PORT,)):
             if host not in hosts:
                 hosts.append(host)
         return hosts
+
+    def _qz_dircon_fallback_devices(self, scanner: NetworkDeviceScanner) -> list[DirconDevice]:
+        devices: list[DirconDevice] = []
+        endpoints = scanner.reachable_endpoints(QZ_DIRCON_VIRTUAL_PORTS)
+        for host, port in endpoints:
+            name = QZ_DIRCON_FALLBACK_NAMES.get(port, f"QZ DIRCON {port}")
+            devices.append(
+                DirconDevice(
+                    name=f"{name} {host}:{port}",
+                    host=host,
+                    port=port,
+                )
+            )
+        return devices
+
+    def _run_qz_websocket_client(self, host: str, port: int) -> None:
+        try:
+            self._try_qz_websocket(host, port)
+        finally:
+            self._start_pending_dircon_if_needed()
 
     def _try_qz_dircon(self, device: DirconDevice) -> bool:
         connected = False
@@ -368,7 +508,7 @@ class QzWifiWorker:
         self._dircon_client = None
         return connected
 
-    def _try_qz_websocket(self, host: str) -> bool:
+    def _try_qz_websocket(self, host: str, port: int = DEFAULT_QZ_WS_PORT) -> bool:
         try:
             import websocket
         except ImportError:
@@ -378,10 +518,10 @@ class QzWifiWorker:
             )
             return False
 
-        url = f"ws://{host}:{DEFAULT_QZ_WS_PORT}"
-        source_id = f"qz-ws:{host}:{DEFAULT_QZ_WS_PORT}"
+        url = f"ws://{host}:{port}"
+        source_id = f"qz-ws:{host}:{port}"
         connected = False
-        self.connection_status.emit_safe(source_id, f"Connecting QZ WebSocket {host}:{DEFAULT_QZ_WS_PORT}")
+        self.connection_status.emit_safe(source_id, f"Connecting QZ WebSocket {host}:{port}")
 
         def on_open(_app) -> None:
             nonlocal connected

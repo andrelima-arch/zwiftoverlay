@@ -9,9 +9,14 @@ class _FakeSelector:
         self.scanning = []
         self.statuses = []
         self.scan_complete_count = 0
+        self.known_devices = {}
+        self.devices = []
 
-    def set_known_devices(self, _devices):
-        pass
+    def set_known_devices(self, devices):
+        self.known_devices = devices
+
+    def add_device(self, device):
+        self.devices.append(device)
 
     def set_scanning(self, scanning):
         self.scanning.append(scanning)
@@ -32,9 +37,17 @@ class _FakeSelector:
 class _FakeReader:
     def __init__(self):
         self.scan_count = 0
+        self.network_disconnects = []
+        self.ble_disconnects = []
 
     def scan(self):
         self.scan_count += 1
+
+    def disconnect_network_device(self, address):
+        self.network_disconnects.append(address)
+
+    def disconnect_device(self, address):
+        self.ble_disconnects.append(address)
 
 
 class _FakeVar:
@@ -179,6 +192,98 @@ def test_main_window_qz_terminal_status_completes_scan(monkeypatch):
     assert window._scan_active is False
     assert window._sensor_selector.scan_complete_count == 1
     assert cancelled == ["after-1"]
+
+
+def test_main_window_qz_busy_status_completes_scan(monkeypatch):
+    window, _scheduled, cancelled = _window_stub(monkeypatch)
+
+    MainWindow._start_sensor_scan(window)
+    MainWindow._on_qz_connection_status(window, "QZ Wi-Fi ocupado; scan em andamento")
+    MainWindow._on_scan_complete(window)
+
+    assert window._scan_active is False
+    assert window._sensor_selector.scan_complete_count == 1
+    assert cancelled == ["after-1"]
+
+
+def test_main_window_qz_found_status_completes_scan(monkeypatch):
+    window, _scheduled, cancelled = _window_stub(monkeypatch)
+
+    MainWindow._start_sensor_scan(window)
+    MainWindow._on_qz_connection_status(window, "QZ Wi-Fi encontrado: 2 fonte(s) disponível(is)")
+    MainWindow._on_scan_complete(window)
+
+    assert window._scan_active is False
+    assert window._sensor_selector.scan_complete_count == 1
+    assert cancelled == ["after-1"]
+
+
+def test_main_window_disconnects_qz_android_websocket_as_network_device(monkeypatch):
+    window, _scheduled, _cancelled = _window_stub(monkeypatch)
+
+    MainWindow._on_disconnect_device_requested(window, "qz-ws:192.168.1.50:34107")
+
+    assert window._sensor_reader.network_disconnects == ["qz-ws:192.168.1.50:34107"]
+    assert window._sensor_reader.ble_disconnects == []
+
+
+def test_main_window_deduplicates_rotating_ble_known_devices(monkeypatch):
+    window, _scheduled, _cancelled = _window_stub(monkeypatch)
+    first = SimpleNamespace(
+        address="AA:BB",
+        name="Wahoo HRM",
+        service_type="hr",
+        compatibility_hint="",
+        compatibility_profile="",
+        detect_service_type=lambda: "hr",
+    )
+    second = SimpleNamespace(
+        address="CC:DD",
+        name="Wahoo HRM",
+        service_type="hr",
+        compatibility_hint="",
+        compatibility_profile="",
+        detect_service_type=lambda: "hr",
+    )
+
+    MainWindow._remember_known_device(window, first)
+    MainWindow._remember_known_device(window, second)
+
+    assert list(window._config.known_ble_devices) == ["CC:DD"]
+
+
+def test_main_window_keeps_qz_virtual_dircon_devices_separate(monkeypatch):
+    window, _scheduled, _cancelled = _window_stub(monkeypatch)
+    kickr = SimpleNamespace(
+        address="qz-dircon:192.168.1.50:36866:KICKR",
+        name="QZ Wahoo KICKR",
+        service_type="qz_dircon",
+        compatibility_hint="QZ Wi-Fi / Wahoo DIRCON",
+        compatibility_profile="qz_dircon",
+        host="192.168.1.50",
+        port=36866,
+        serial_number="",
+        mac_address="",
+        source_type="qz_dircon",
+    )
+    hrm = SimpleNamespace(
+        address="qz-dircon:192.168.1.50:36867:HRM",
+        name="QZ Wahoo HRM",
+        service_type="qz_dircon",
+        compatibility_hint="QZ Wi-Fi / Wahoo DIRCON",
+        compatibility_profile="qz_dircon",
+        host="192.168.1.50",
+        port=36867,
+        serial_number="",
+        mac_address="",
+        source_type="qz_dircon",
+    )
+
+    MainWindow._on_network_device_found(window, kickr)
+    MainWindow._on_network_device_found(window, hrm)
+
+    assert kickr.address in window._config.known_ble_devices
+    assert hrm.address in window._config.known_ble_devices
 
 
 def test_main_window_startup_sync_runs_only_for_intervals_source(monkeypatch):

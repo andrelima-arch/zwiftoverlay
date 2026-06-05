@@ -183,7 +183,9 @@ class MainWindow(ctk.CTk):
         self._scan_active = False
         self._scan_timeout_after_id = None
 
-        self._qz_enabled_var = ctk.BooleanVar(value=bool(config.qz_wifi_enabled))
+        if not config.qz_wifi_enabled:
+            config.qz_wifi_enabled = True
+        self._qz_enabled_var = ctk.BooleanVar(value=True)
         self._qz_mqtt_enabled_var = ctk.BooleanVar(value=bool(config.qz_mqtt_enabled))
         self._qz_mqtt_host_var = ctk.StringVar(value=config.qz_mqtt_host)
         self._qz_mqtt_port_var = ctk.StringVar(value=str(config.qz_mqtt_port))
@@ -290,14 +292,15 @@ class MainWindow(ctk.CTk):
     def _on_connect_device_requested(self, address: str, service: str, details: dict) -> None:
         if not address or service == "unknown":
             return
-        if service == "qz_dircon":
+        if service in {"qz_dircon", "qz_websocket"}:
             if isinstance(details, dict):
                 known = self._config.known_ble_devices
-                known[address] = {
+                known = self._upsert_known_details(known, {
                     **known.get(address, {}),
                     **details,
+                    "address": address,
                     "last_seen": datetime.now(timezone.utc).isoformat(),
-                }
+                })
                 self._config.known_ble_devices = known
                 self._sensor_selector.set_known_devices(known)
             self._sensor_reader.connect_network_device(address, service, details)
@@ -306,11 +309,12 @@ class MainWindow(ctk.CTk):
         self._config.sensor_addresses = sensors
         if isinstance(details, dict):
             known = self._config.known_ble_devices
-            known[address] = {
+            known = self._upsert_known_details(known, {
                 **known.get(address, {}),
                 **details,
+                "address": address,
                 "last_seen": datetime.now(timezone.utc).isoformat(),
-            }
+            })
             self._config.known_ble_devices = known
         self._config.known_ble_devices = self._merge_known_with_selected()
         self._sensor_selector.set_known_devices(self._config.known_ble_devices)
@@ -319,7 +323,7 @@ class MainWindow(ctk.CTk):
     def _on_disconnect_device_requested(self, address: str) -> None:
         if not address:
             return
-        if address.startswith("qz-dircon:"):
+        if address.startswith(("qz-dircon:", "qz-ws:")):
             self._sensor_reader.disconnect_network_device(address)
             return
         self._sensor_reader.disconnect_device(address)
@@ -339,7 +343,7 @@ class MainWindow(ctk.CTk):
     def _on_network_device_found(self, device) -> None:
         self._sensor_selector.add_device(device)
         known = self._config.known_ble_devices
-        known[device.address] = {
+        known = self._upsert_known_details(known, {
             "address": device.address,
             "name": device.name or "",
             "service_type": device.service_type,
@@ -351,7 +355,7 @@ class MainWindow(ctk.CTk):
             "mac_address": str(getattr(device, "mac_address", "") or ""),
             "source_type": str(getattr(device, "source_type", "") or ""),
             "last_seen": datetime.now(timezone.utc).isoformat(),
-        }
+        })
         self._config.known_ble_devices = known
         self._sensor_selector.set_known_devices(known)
 
@@ -362,130 +366,8 @@ class MainWindow(ctk.CTk):
         self._sensor_selector.update_connection_status(address, status)
 
     def _build_qz_tab(self) -> None:
-        frame = ctk.CTkFrame(self._qz_tab)
-        frame.pack(fill="x", padx=5, pady=5)
-        frame.grid_columnconfigure(1, weight=1)
-
-        mqtt_frame = ctk.CTkFrame(frame)
-        mqtt_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-        mqtt_frame.grid_columnconfigure(1, weight=1)
-        mqtt_frame.grid_columnconfigure(3, weight=1)
-
-        self._qz_mqtt_enabled_check = ctk.CTkCheckBox(
-            mqtt_frame,
-            text=self._text("qz.mqtt_enabled"),
-            variable=self._qz_mqtt_enabled_var,
-            command=self._on_qz_mqtt_enabled_changed,
-        )
-        self._qz_mqtt_enabled_check.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky="w")
-
-        self._qz_mqtt_host_label = ctk.CTkLabel(mqtt_frame, text="Host:")
-        self._qz_mqtt_host_label.grid(row=1, column=0, padx=5, pady=3, sticky="w")
-        self._qz_mqtt_host_entry = ctk.CTkEntry(mqtt_frame, textvariable=self._qz_mqtt_host_var)
-        self._qz_mqtt_host_entry.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
-
-        self._qz_mqtt_port_label = ctk.CTkLabel(mqtt_frame, text=self._text("qz.port"))
-        self._qz_mqtt_port_label.grid(row=1, column=2, padx=5, pady=3, sticky="w")
-        self._qz_mqtt_port_entry = ctk.CTkEntry(mqtt_frame, textvariable=self._qz_mqtt_port_var, width=80)
-        self._qz_mqtt_port_entry.grid(row=1, column=3, padx=5, pady=3, sticky="ew")
-
-        self._qz_mqtt_device_label = ctk.CTkLabel(mqtt_frame, text="Device:")
-        self._qz_mqtt_device_label.grid(row=2, column=0, padx=5, pady=3, sticky="w")
-        self._qz_mqtt_device_entry = ctk.CTkEntry(mqtt_frame, textvariable=self._qz_mqtt_device_var)
-        self._qz_mqtt_device_entry.grid(row=2, column=1, padx=5, pady=3, sticky="ew")
-
-        self._qz_mqtt_username_label = ctk.CTkLabel(mqtt_frame, text=self._text("qz.username"))
-        self._qz_mqtt_username_label.grid(row=2, column=2, padx=5, pady=3, sticky="w")
-        self._qz_mqtt_username_entry = ctk.CTkEntry(mqtt_frame, textvariable=self._qz_mqtt_username_var)
-        self._qz_mqtt_username_entry.grid(row=2, column=3, padx=5, pady=3, sticky="ew")
-
-        self._qz_mqtt_password_label = ctk.CTkLabel(mqtt_frame, text=self._text("qz.password"))
-        self._qz_mqtt_password_label.grid(row=3, column=0, padx=5, pady=3, sticky="w")
-        self._qz_mqtt_password_entry = ctk.CTkEntry(
-            mqtt_frame,
-            textvariable=self._qz_mqtt_password_var,
-            show="*",
-        )
-        self._qz_mqtt_password_entry.grid(row=3, column=1, padx=5, pady=3, sticky="ew")
-
-        mqtt_buttons = ctk.CTkFrame(mqtt_frame)
-        mqtt_buttons.grid(row=3, column=2, columnspan=2, padx=5, pady=3, sticky="ew")
-        mqtt_buttons.grid_columnconfigure((0, 1), weight=1)
-        self._qz_mqtt_connect_button = ctk.CTkButton(mqtt_buttons, text=self._text("qz.connect_mqtt"), command=self._connect_qz_mqtt)
-        self._qz_mqtt_connect_button.grid(
-            row=0, column=0, padx=3, pady=3, sticky="ew"
-        )
-        self._qz_mqtt_disconnect_button = ctk.CTkButton(
-            mqtt_buttons,
-            text=self._text("qz.disconnect"),
-            fg_color="#666666",
-            command=self._disconnect_qz_mqtt,
-        )
-        self._qz_mqtt_disconnect_button.grid(row=0, column=1, padx=3, pady=3, sticky="ew")
-
-        self._qz_enabled_check = ctk.CTkCheckBox(
-            frame,
-            text=self._text("qz.wifi_enabled"),
-            variable=self._qz_enabled_var,
-            command=self._on_qz_enabled_changed,
-        )
-        self._qz_enabled_check.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
-
-        self._qz_help_label = ctk.CTkLabel(
-            frame,
-            text=self._text("qz.help"),
-            font=ctk.CTkFont(size=11),
-            text_color="gray",
-        )
-        self._qz_help_label.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 5), sticky="w")
-
-        dircon_frame = ctk.CTkFrame(frame)
-        dircon_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-        dircon_frame.grid_columnconfigure(1, weight=1)
-
-        self._qz_dircon_host_label = ctk.CTkLabel(dircon_frame, text="DIRCON host:")
-        self._qz_dircon_host_label.grid(row=0, column=0, padx=5, pady=3, sticky="w")
-        ctk.CTkEntry(dircon_frame, textvariable=self._qz_dircon_host_var).grid(
-            row=0, column=1, padx=5, pady=3, sticky="ew"
-        )
-        self._qz_dircon_port_label = ctk.CTkLabel(dircon_frame, text=self._text("qz.port"))
-        self._qz_dircon_port_label.grid(row=0, column=2, padx=5, pady=3, sticky="w")
-        ctk.CTkEntry(dircon_frame, textvariable=self._qz_dircon_port_var, width=80).grid(
-            row=0, column=3, padx=5, pady=3, sticky="ew"
-        )
-        self._qz_dircon_manual_button = ctk.CTkButton(
-            dircon_frame,
-            text=self._text("qz.connect_dircon_manual"),
-            command=self._connect_qz_dircon_manual,
-        )
-        self._qz_dircon_manual_button.grid(row=1, column=0, columnspan=4, padx=5, pady=3, sticky="ew")
-
-        button_frame = ctk.CTkFrame(frame)
-        button_frame.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-        button_frame.grid_columnconfigure((0, 1), weight=1)
-
-        self._qz_connect_button = ctk.CTkButton(
-            button_frame,
-            text=self._text("qz.scan"),
-            command=self._scan_qz_wifi,
-        )
-        self._qz_connect_button.grid(row=0, column=0, padx=3, pady=3, sticky="ew")
-
-        self._qz_disconnect_button = ctk.CTkButton(
-            button_frame,
-            text=self._text("qz.disconnect_wifi"),
-            fg_color="#666666",
-            command=self._disconnect_qz_wifi,
-        )
-        self._qz_disconnect_button.grid(row=0, column=1, padx=3, pady=3, sticky="ew")
-
         self._qz_status_text = self._text("qz.disconnected")
-        self._qz_status_label = ctk.CTkLabel(
-            frame,
-            text=self._text("qz.sources", status=self._qz_status_text),
-            text_color="gray",
-        )
-        self._qz_status_label.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        self._qz_status_label = ctk.CTkLabel(self._qz_tab, text="")
 
     def _on_qz_enabled_changed(self) -> None:
         self._save_qz_config()
@@ -545,9 +427,12 @@ class MainWindow(ctk.CTk):
         self._qz_status_label.configure(text=self._text("qz.sources", status=status), text_color=color)
         terminal_scan_statuses = (
             "QZ DIRCON encontrado",
+            "QZ Android encontrado",
+            "QZ Wi-Fi encontrado",
             "mDNS não encontrou QZ",
             "QZ Wi-Fi indisponível",
             "QZ Wi-Fi erro",
+            "QZ Wi-Fi ocupado",
             "No compatible QZ/Wi-Fi device found",
         )
         if status.startswith(terminal_scan_statuses):
@@ -595,7 +480,8 @@ class MainWindow(ctk.CTk):
         self._scan_auto_connect = False
 
     def _save_qz_config(self) -> None:
-        self._config.qz_wifi_enabled = self._qz_enabled_var.get()
+        self._qz_enabled_var.set(True)
+        self._config.qz_wifi_enabled = True
         self._config.qz_mqtt_enabled = self._qz_mqtt_enabled_var.get()
         self._config.qz_mqtt_host = self._qz_mqtt_host_var.get()
         self._config.qz_mqtt_port = self._qz_mqtt_port_var.get()
@@ -657,7 +543,7 @@ class MainWindow(ctk.CTk):
 
     def _remember_known_device(self, device: ScannedDevice) -> None:
         known = self._config.known_ble_devices
-        known[device.address] = self._device_to_known_details(device)
+        known = self._upsert_known_details(known, self._device_to_known_details(device))
         self._config.known_ble_devices = known
         self._sensor_selector.set_known_devices(known)
 
@@ -665,11 +551,12 @@ class MainWindow(ctk.CTk):
         known = self._config.known_ble_devices
         for sensor in self._sensor_selector.get_selected_sensors().values():
             if isinstance(sensor, dict) and sensor.get("address"):
-                known[str(sensor["address"])] = {
+                known = self._upsert_known_details(known, {
                     **known.get(str(sensor["address"]), {}),
                     **sensor,
+                    "address": str(sensor["address"]),
                     "last_seen": known.get(str(sensor["address"]), {}).get("last_seen", ""),
-                }
+                }, preserve_selected=True)
         return known
 
     def _device_to_sensor_details(self, device: ScannedDevice, service: str) -> dict[str, str]:
@@ -690,6 +577,45 @@ class MainWindow(ctk.CTk):
 
     def _normalise_device_name(self, name: str) -> str:
         return " ".join((name or "").upper().replace("_", " ").split())
+
+    def _upsert_known_details(
+        self,
+        known: dict,
+        details: dict,
+        *,
+        preserve_selected: bool = False,
+    ) -> dict:
+        address = str(details.get("address", "") or "")
+        if not address:
+            return known
+        updated = dict(known)
+        selected_addresses = {
+            str(sensor.get("address", ""))
+            for sensor in self._sensor_selector.get_selected_sensors().values()
+            if isinstance(sensor, dict) and sensor.get("address")
+        } if preserve_selected else set()
+        identity = self._known_device_identity(details)
+        for existing_address, existing_details in list(updated.items()):
+            if existing_address == address:
+                continue
+            if existing_address in selected_addresses:
+                continue
+            if self._known_device_identity(existing_details) == identity:
+                updated.pop(existing_address, None)
+        updated[address] = details
+        return updated
+
+    def _known_device_identity(self, details: dict) -> tuple[str, ...]:
+        service = str(details.get("service_type", "") or "")
+        host = str(details.get("host", "") or "")
+        port = str(details.get("port", "") or "")
+        if service in {"qz_dircon", "qz_websocket"}:
+            return (service, host, port)
+        name = self._normalise_device_name(str(details.get("name", "") or ""))
+        profile = str(details.get("compatibility_profile", "") or "")
+        if service and service != "unknown" and name:
+            return (service, profile, name)
+        return ("address", str(details.get("address", "") or ""))
 
     def _on_profile_source_changed(self, choice: str) -> None:
         source = self._source_key_from_choice(choice)

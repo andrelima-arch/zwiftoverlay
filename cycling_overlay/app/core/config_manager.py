@@ -276,7 +276,7 @@ class ConfigManager:
 
     @property
     def qz_wifi_enabled(self) -> bool:
-        return bool(self._data.get("qz_wifi_enabled", False))
+        return bool(self._data.get("qz_wifi_enabled", True))
 
     @qz_wifi_enabled.setter
     def qz_wifi_enabled(self, value: bool) -> None:

@@ -10,6 +10,7 @@ from app.sensors.qz_mqtt import QzMqttWorker
 from app.sensors.qz_wifi import QzWifiWorker
 from app.sensors.qz_wifi import QZ_DIRCON_SERVICE_TYPE
 from app.sensors.qz_wifi import QZ_WIFI_SOURCE_ID
+from app.sensors.qz_wifi import QZ_WEBSOCKET_SERVICE_TYPE
 from app.sensors.qz_websocket import QzWebSocketWorker
 from app.sensors.scanner import ScannedDevice, SERVICE_LABELS
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 CONNECT_QUEUE_DELAY_MS = 750
 CONNECT_ATTEMPT_TIMEOUT_MS = 35000
+NETWORK_CONNECT_ATTEMPT_TIMEOUT_MS = 35000
 TERMINAL_STATUSES = ("Error", "Disconnected")
 
 
@@ -43,6 +45,7 @@ class SensorReader:
         self._connected_devices: dict[str, str] = {}
         self._connecting_devices: set[str] = set()
         self._network_connecting_devices: set[str] = set()
+        self._network_connect_attempt_timers: dict[str, str | None] = {}
         self._pending_device_services: dict[str, str] = {}
         self._device_details: dict[str, dict[str, str]] = {}
         self._connect_queue: deque[tuple[str, str, dict | None]] = deque()
@@ -74,6 +77,9 @@ class SensorReader:
         if self._connect_attempt_timer:
             EventLoop.get().cancel(self._connect_attempt_timer)
             self._connect_attempt_timer = None
+        for timer_id in list(self._network_connect_attempt_timers.values()):
+            EventLoop.get().cancel(timer_id)
+        self._network_connect_attempt_timers.clear()
         self._connect_queue.clear()
         self._queued_addresses.clear()
         self._active_connect_address = None
@@ -120,9 +126,27 @@ class SensorReader:
                 or address in self._network_connecting_devices
             ):
                 return
+            self._switch_active_network_device(address)
+            if isinstance(device_info, dict):
+                self._device_details[address] = dict(device_info)
             self._network_connecting_devices.add(address)
             self.connection_status_changed.emit(address, "Queued...")
+            self._schedule_network_connect_attempt_timeout(address)
             self._qz_wifi_worker.connect_dircon(device_info or {"address": address})
+        elif service == QZ_WEBSOCKET_SERVICE_TYPE:
+            if (
+                not address
+                or address in self._connected_devices
+                or address in self._network_connecting_devices
+            ):
+                return
+            self._switch_active_network_device(address)
+            if isinstance(device_info, dict):
+                self._device_details[address] = dict(device_info)
+            self._network_connecting_devices.add(address)
+            self.connection_status_changed.emit(address, "Queued...")
+            self._schedule_network_connect_attempt_timeout(address)
+            self._qz_wifi_worker.connect_qz_websocket(device_info or {"address": address})
 
     def connect_qz_dircon_manual(self, host: str, port: int | str) -> None:
         self._qz_wifi_worker.connect_manual_dircon(host, port)
@@ -131,8 +155,10 @@ class SensorReader:
         self._qz_wifi_worker.stop()
 
     def disconnect_network_device(self, address: str) -> None:
-        if address.startswith("qz-dircon:"):
+        if address.startswith(("qz-dircon:", "qz-ws:")):
             self._network_connecting_devices.discard(address)
+            self._cancel_network_connect_attempt_timeout(address)
+            self._connected_devices.pop(address, None)
             self._qz_wifi_worker.stop()
             self._remove_source(address)
             self.connection_status_changed.emit(address, "Disconnected")
@@ -268,10 +294,13 @@ class SensorReader:
             self.connection_status_changed.emit(address, device_status)
             if device_status == "Connected":
                 self._network_connecting_devices.discard(address)
-                self._connected_devices[address] = QZ_DIRCON_SERVICE_TYPE
-                self.device_connected.emit(address, "QZ Wi-Fi / Wahoo DIRCON")
+                self._cancel_network_connect_attempt_timeout(address)
+                service = self._network_service_for_address(address)
+                self._connected_devices[address] = service
+                self.device_connected.emit(address, self._network_service_label(service))
             elif device_status.startswith("Error") or device_status == "Disconnected":
                 self._network_connecting_devices.discard(address)
+                self._cancel_network_connect_attempt_timeout(address)
         if status.startswith("Error") or status == "Disconnected":
             self._remove_source(address)
             if address != QZ_WIFI_SOURCE_ID:
@@ -287,9 +316,54 @@ class SensorReader:
             return "Queued..."
         return status
 
+    def _network_service_for_address(self, address: str) -> str:
+        details = self._device_details.get(address, {})
+        service = str(details.get("service_type") or "")
+        if service:
+            return service
+        if address.startswith("qz-ws:"):
+            return QZ_WEBSOCKET_SERVICE_TYPE
+        return QZ_DIRCON_SERVICE_TYPE
+
+    def _network_service_label(self, service: str) -> str:
+        if service == QZ_WEBSOCKET_SERVICE_TYPE:
+            return "QZ Wi-Fi / Android app"
+        return "QZ Wi-Fi / Wahoo DIRCON"
+
+    def _switch_active_network_device(self, address: str) -> None:
+        for connected_address in list(self._connected_devices):
+            if connected_address == address:
+                continue
+            if connected_address.startswith(("qz-dircon:", "qz-ws:")):
+                self.disconnect_network_device(connected_address)
+
+    def _schedule_network_connect_attempt_timeout(self, address: str) -> None:
+        self._cancel_network_connect_attempt_timeout(address)
+
+        def on_timeout() -> None:
+            self._network_connect_attempt_timers.pop(address, None)
+            if address not in self._network_connecting_devices:
+                return
+            self.connection_status_changed.emit(address, "Error: QZ Wi-Fi connection timed out")
+            self._network_connecting_devices.discard(address)
+            self._connected_devices.pop(address, None)
+            self._qz_wifi_worker.stop()
+            self._remove_source(address)
+            self.device_disconnected.emit(address)
+
+        timer_id = EventLoop.get().call_later(NETWORK_CONNECT_ATTEMPT_TIMEOUT_MS, on_timeout)
+        self._network_connect_attempt_timers[address] = timer_id
+
+    def _cancel_network_connect_attempt_timeout(self, address: str) -> None:
+        timer_id = self._network_connect_attempt_timers.pop(address, None)
+        EventLoop.get().cancel(timer_id)
+
     def _drain_connect_queue(self) -> None:
         if self._active_connect_address is not None:
-            return
+            if self._active_connect_address not in self._connecting_devices:
+                self._active_connect_address = None
+            else:
+                return
         while self._connect_queue:
             address, service, device_info = self._connect_queue.popleft()
             self._queued_addresses.discard(address)
@@ -298,7 +372,14 @@ class SensorReader:
             self._active_connect_address = address
             self.connection_status_changed.emit(address, "Connecting...")
             self._schedule_connect_attempt_timeout(address)
-            self._worker.request_connect(address, service, device_info)
+            scheduled = self._worker.request_connect(address, service, device_info)
+            if scheduled is False:
+                self.connection_status_changed.emit(address, "Error: BLE worker unavailable")
+                self._connecting_devices.discard(address)
+                self._pending_device_services.pop(address, None)
+                self._remove_source(address)
+                self._finish_connect_attempt(address)
+                continue
             return
 
     def _finish_connect_attempt(self, address: str) -> None:

@@ -94,9 +94,11 @@ class BleWorker:
         if self._loop and self._running:
             self._loop.create_task(self._do_scan())
 
-    def request_connect(self, address: str, service: str, device_info: dict | None = None) -> None:
+    def request_connect(self, address: str, service: str, device_info: dict | None = None) -> bool:
         if self._loop and self._running:
             self._loop.create_task(self._do_connect(address, service, device_info))
+            return True
+        return False
 
     def request_disconnect(self, address: str) -> None:
         if self._loop and self._running:

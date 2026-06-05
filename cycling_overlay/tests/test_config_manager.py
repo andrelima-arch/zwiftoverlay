@@ -151,6 +151,11 @@ def test_config_persists_qz_wifi_enabled(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.config_manager.user_config_dir", lambda _: str(tmp_path))
 
     config = ConfigManager()
+    assert config.qz_wifi_enabled is True
+
+    config.qz_wifi_enabled = False
+    assert ConfigManager().qz_wifi_enabled is False
+
     config.qz_wifi_enabled = True
 
     assert ConfigManager().qz_wifi_enabled is True

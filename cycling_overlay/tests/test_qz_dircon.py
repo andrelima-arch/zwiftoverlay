@@ -9,10 +9,13 @@ from app.sensors.qz_dircon import (
     DIRCON_ENABLE_NOTIFICATIONS,
     DIRCON_HEADER_LENGTH,
     DIRCON_NOTIFICATION,
+    FTMS_INDOOR_BIKE_DATA,
     FTMS_SERVICE,
     HR_MEASUREMENT,
     POWER_MEASUREMENT,
+    POWER_SERVICE,
     DirconDevice,
+    DirconPacket,
     DirconMdnsScanner,
     DirconTcpClient,
     dircon_browser_service_types,
@@ -210,3 +213,55 @@ def test_dircon_socket_close_after_connected_is_normal_disconnect(monkeypatch):
     assert any(status.startswith("Connected QZ DIRCON") for status in statuses)
     assert "Disconnected" in statuses
     assert not any(status.startswith("Error") for status in statuses)
+
+
+def test_dircon_characteristic_timeout_for_nonessential_service_does_not_abort(monkeypatch):
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, _status: None,
+        stop_event=threading.Event(),
+    )
+    requested_services = []
+
+    def fake_send_request(_sock, _identifier, *, uuid16=None, additional_data=b""):
+        requested_services.append(uuid16)
+        return len(requested_services)
+
+    def fake_wait_for_response(_sock, _identifier, sequence, timeout=4.0):
+        service = requested_services[sequence - 1]
+        if service == POWER_SERVICE:
+            raise TimeoutError("slow optional service")
+        return DirconPacket(
+            identifier=DIRCON_DISCOVER_CHARACTERISTICS,
+            sequence=sequence,
+            uuid16=service,
+            uuids=[FTMS_INDOOR_BIKE_DATA],
+        )
+
+    monkeypatch.setattr(client, "_send_request", fake_send_request)
+    monkeypatch.setattr(client, "_wait_for_response", fake_wait_for_response)
+
+    characteristics = client._discover_characteristics(object(), [POWER_SERVICE, FTMS_SERVICE])
+
+    assert characteristics == {FTMS_SERVICE: [FTMS_INDOOR_BIKE_DATA]}
+
+
+def test_dircon_preconnect_error_is_not_masked_by_disconnected(monkeypatch):
+    statuses = []
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, status: statuses.append(status),
+        stop_event=threading.Event(),
+    )
+
+    def fail_connect(*_args, **_kwargs):
+        raise TimeoutError("connect timed out")
+
+    monkeypatch.setattr("app.sensors.qz_dircon.socket.create_connection", fail_connect)
+
+    client.run()
+
+    assert statuses[-1] == "Error: connect timed out"
+    assert "Disconnected" not in statuses

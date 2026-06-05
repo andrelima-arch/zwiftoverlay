@@ -26,6 +26,10 @@ DIRCON_DISCOVER_CHARACTERISTICS = 0x02
 DIRCON_ENABLE_NOTIFICATIONS = 0x05
 DIRCON_NOTIFICATION = 0x06
 DIRCON_SUCCESS = 0x00
+DIRCON_CONNECT_TIMEOUT_SECONDS = 6.0
+DIRCON_RESPONSE_TIMEOUT_SECONDS = 4.0
+QZ_DIRCON_BASE_PORT = 36866
+QZ_DIRCON_VIRTUAL_PORTS = tuple(range(QZ_DIRCON_BASE_PORT, QZ_DIRCON_BASE_PORT + 4))
 
 FTMS_SERVICE = 0x1826
 POWER_SERVICE = 0x1818
@@ -42,6 +46,14 @@ SUPPORTED_CHARACTERISTICS = {
     CSC_MEASUREMENT,
     HR_MEASUREMENT,
 }
+
+PREFERRED_SERVICES = (FTMS_SERVICE, POWER_SERVICE, CSC_SERVICE, HR_SERVICE)
+PREFERRED_NOTIFICATION_CHARACTERISTICS = (
+    FTMS_INDOOR_BIKE_DATA,
+    POWER_MEASUREMENT,
+    CSC_MEASUREMENT,
+    HR_MEASUREMENT,
+)
 
 
 def is_zeroconf_available() -> bool:
@@ -375,9 +387,13 @@ class DirconTcpClient:
     def run(self) -> None:
         source_id = self.device.source_id
         connected = False
+        had_error = False
         try:
             self.status_callback(source_id, f"Connecting QZ DIRCON {self.device.host}:{self.device.port}")
-            with socket.create_connection((self.device.host, self.device.port), timeout=4.0) as sock:
+            with socket.create_connection(
+                (self.device.host, self.device.port),
+                timeout=DIRCON_CONNECT_TIMEOUT_SECONDS,
+            ) as sock:
                 self._socket = sock
                 sock.settimeout(1.0)
                 services = self._discover_services(sock)
@@ -394,10 +410,12 @@ class DirconTcpClient:
                     logger.info("QZ DIRCON disconnected for %s: %s", source_id, exc)
                 else:
                     logger.warning("QZ DIRCON error for %s: %s", source_id, exc)
+                    had_error = True
                     self.status_callback(source_id, f"Error: {exc}")
         finally:
             self._socket = None
-            self.status_callback(source_id, "Disconnected")
+            if connected and not had_error:
+                self.status_callback(source_id, "Disconnected")
 
     def close(self) -> None:
         sock = self._socket
@@ -441,32 +459,64 @@ class DirconTcpClient:
 
     def _discover_characteristics(self, sock: socket.socket, services: list[int]) -> dict[int, list[int]]:
         result: dict[int, list[int]] = {}
-        for service in services:
-            sequence = self._send_request(sock, DIRCON_DISCOVER_CHARACTERISTICS, uuid16=service)
-            packet = self._wait_for_response(sock, DIRCON_DISCOVER_CHARACTERISTICS, sequence)
+        for service in _ordered_services(services):
+            try:
+                sequence = self._send_request(sock, DIRCON_DISCOVER_CHARACTERISTICS, uuid16=service)
+                packet = self._wait_for_response(sock, DIRCON_DISCOVER_CHARACTERISTICS, sequence)
+            except TimeoutError as exc:
+                logger.warning(
+                    "Skipping QZ DIRCON service 0x%04x after characteristic timeout: %s",
+                    service,
+                    exc,
+                )
+                continue
+            except RuntimeError as exc:
+                logger.warning(
+                    "Skipping QZ DIRCON service 0x%04x after characteristic error: %s",
+                    service,
+                    exc,
+                )
+                continue
             result[service] = packet.uuids
         return result
 
     def _enable_supported_notifications(self, sock: socket.socket, characteristics: dict[int, list[int]]) -> list[int]:
         enabled: list[int] = []
-        for chars in characteristics.values():
-            for characteristic in chars:
-                if characteristic not in SUPPORTED_CHARACTERISTICS:
-                    continue
-                sequence = self._send_request(
-                    sock,
-                    DIRCON_ENABLE_NOTIFICATIONS,
-                    uuid16=characteristic,
-                    additional_data=b"\x01",
+        for characteristic in _ordered_characteristics(characteristics):
+            if characteristic not in SUPPORTED_CHARACTERISTICS:
+                continue
+            if characteristic in enabled:
+                continue
+            sequence = self._send_request(
+                sock,
+                DIRCON_ENABLE_NOTIFICATIONS,
+                uuid16=characteristic,
+                additional_data=b"\x01",
+            )
+            try:
+                self._wait_for_response(sock, DIRCON_ENABLE_NOTIFICATIONS, sequence)
+            except TimeoutError:
+                logger.info(
+                    "QZ DIRCON notification enable for 0x%04x did not ACK; accepting async notifications",
+                    characteristic,
                 )
-                try:
-                    self._wait_for_response(sock, DIRCON_ENABLE_NOTIFICATIONS, sequence)
-                except TimeoutError:
-                    pass
-                enabled.append(characteristic)
+            except RuntimeError as exc:
+                logger.warning(
+                    "Skipping QZ DIRCON notification 0x%04x after enable error: %s",
+                    characteristic,
+                    exc,
+                )
+                continue
+            enabled.append(characteristic)
         return enabled
 
-    def _wait_for_response(self, sock: socket.socket, identifier: int, sequence: int, timeout: float = 3.0) -> DirconPacket:
+    def _wait_for_response(
+        self,
+        sock: socket.socket,
+        identifier: int,
+        sequence: int,
+        timeout: float = DIRCON_RESPONSE_TIMEOUT_SECONDS,
+    ) -> DirconPacket:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and not self.stop_event.is_set():
             for packet in self._read_available_packets(sock):
@@ -548,6 +598,23 @@ class DirconTcpClient:
                 )
             return {"cadence": rpm} if rpm is not None else {}
         return parse_dircon_notification(uuid16, payload)
+
+
+def _ordered_services(services: list[int]) -> list[int]:
+    ordered = [service for service in PREFERRED_SERVICES if service in services]
+    ordered.extend(service for service in services if service not in ordered)
+    return ordered
+
+
+def _ordered_characteristics(characteristics: dict[int, list[int]]) -> list[int]:
+    available: list[int] = []
+    for service in _ordered_services(list(characteristics.keys())):
+        for characteristic in characteristics.get(service, []):
+            if characteristic not in available:
+                available.append(characteristic)
+    ordered = [char for char in PREFERRED_NOTIFICATION_CHARACTERISTICS if char in available]
+    ordered.extend(char for char in available if char not in ordered)
+    return ordered
 
 
 def _cadence_from_revolutions(

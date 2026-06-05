@@ -27,19 +27,37 @@ class WorkoutLoader(ctk.CTkFrame):
         self.profile_synced = Signal(object)
         self.profile_sync_failed = Signal(str)
 
-        self._source_label_widget = ctk.CTkLabel(self, text=self._text("loader.source"), font=ctk.CTkFont(weight="bold"))
+        self._columns_frame = ctk.CTkFrame(self)
+        self._columns_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self._columns_frame.grid_columnconfigure(0, weight=0, minsize=260)
+        self._columns_frame.grid_columnconfigure(1, weight=1)
+        self._columns_frame.grid_rowconfigure(0, weight=1)
+
+        self._source_column = ctk.CTkFrame(self._columns_frame)
+        self._source_column.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=0)
+        self._workouts_column = ctk.CTkFrame(self._columns_frame)
+        self._workouts_column.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=0)
+
+        self._source_label_widget = ctk.CTkLabel(self._source_column, text=self._text("loader.source"), font=ctk.CTkFont(weight="bold"))
         self._source_label_widget.pack(anchor="w", padx=5, pady=(5, 2))
 
         self._source_var = ctk.StringVar(value=self._source_label(self._source_key))
         self._source_menu = ctk.CTkOptionMenu(
-            self,
+            self._source_column,
             values=self._source_labels(),
             variable=self._source_var,
             command=self._on_source_changed,
         )
         self._source_menu.pack(fill="x", padx=5, pady=2)
 
-        self._paste_frame = ctk.CTkFrame(self)
+        self._workouts_label_widget = ctk.CTkLabel(
+            self._workouts_column,
+            text=self._text("loader.workouts"),
+            font=ctk.CTkFont(weight="bold"),
+        )
+        self._workouts_label_widget.pack(anchor="w", padx=5, pady=(5, 2))
+
+        self._paste_frame = ctk.CTkFrame(self._source_column)
 
         self._paste_help_label = ctk.CTkLabel(
             self._paste_frame,
@@ -58,10 +76,11 @@ class WorkoutLoader(ctk.CTkFrame):
         )
         self._parse_button.pack(fill="x", padx=5, pady=2)
 
-        self._result_label = ctk.CTkLabel(self._paste_frame, text="", font=ctk.CTkFont(size=12))
-        self._result_label.pack(anchor="w", padx=5, pady=(2, 5))
+        self._paste_workouts_frame = ctk.CTkFrame(self._workouts_column)
+        self._result_label = ctk.CTkLabel(self._paste_workouts_frame, text="", font=ctk.CTkFont(size=12))
+        self._result_label.pack(anchor="w", padx=5, pady=(5, 5))
 
-        self._api_frame = ctk.CTkFrame(self)
+        self._api_frame = ctk.CTkFrame(self._source_column)
 
         self._api_help_label = ctk.CTkLabel(
             self._api_frame,
@@ -79,10 +98,11 @@ class WorkoutLoader(ctk.CTkFrame):
         self._api_status_label = ctk.CTkLabel(self._api_frame, text="", font=ctk.CTkFont(size=11), text_color="gray")
         self._api_status_label.pack(anchor="w", padx=5, pady=2)
 
-        self._events_frame = ctk.CTkScrollableFrame(self._api_frame, height=200)
+        self._api_workouts_frame = ctk.CTkFrame(self._workouts_column)
+        self._events_frame = ctk.CTkScrollableFrame(self._api_workouts_frame, height=200)
         self._events_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self._zwo_frame = ctk.CTkFrame(self)
+        self._zwo_frame = ctk.CTkFrame(self._source_column)
 
         self._zwo_title_label = ctk.CTkLabel(
             self._zwo_frame,
@@ -110,7 +130,8 @@ class WorkoutLoader(ctk.CTkFrame):
         self._zwo_status_label = ctk.CTkLabel(self._zwo_frame, text="", font=ctk.CTkFont(size=11), text_color="gray")
         self._zwo_status_label.pack(anchor="w", padx=5, pady=2)
 
-        self._zwo_list_frame = ctk.CTkScrollableFrame(self._zwo_frame, height=220)
+        self._zwo_workouts_frame = ctk.CTkFrame(self._workouts_column)
+        self._zwo_list_frame = ctk.CTkScrollableFrame(self._zwo_workouts_frame, height=220)
         self._zwo_list_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         if self._config and self._config.last_zwo_folder:
@@ -124,6 +145,7 @@ class WorkoutLoader(ctk.CTkFrame):
         self._source_var.set(self._source_label(current_key))
         self._source_menu.configure(values=self._source_labels())
         self._source_label_widget.configure(text=self._text("loader.source"))
+        self._workouts_label_widget.configure(text=self._text("loader.workouts"))
         self._paste_help_label.configure(text=self._text("loader.paste_help"))
         self._parse_button.configure(text=self._text("loader.parse"))
         self._api_help_label.configure(text=self._text("loader.api_help"))
@@ -193,15 +215,21 @@ class WorkoutLoader(ctk.CTkFrame):
     def _on_source_changed(self, choice: str) -> None:
         self._source_key = self._source_key_from_choice(choice)
         self._paste_frame.pack_forget()
+        self._paste_workouts_frame.pack_forget()
         self._api_frame.pack_forget()
+        self._api_workouts_frame.pack_forget()
         self._zwo_frame.pack_forget()
+        self._zwo_workouts_frame.pack_forget()
 
         if self._source_key == "paste":
             self._paste_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            self._paste_workouts_frame.pack(fill="both", expand=True, padx=5, pady=5)
         elif self._source_key == "api":
             self._api_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            self._api_workouts_frame.pack(fill="both", expand=True, padx=5, pady=5)
         elif self._source_key == "zwo":
             self._zwo_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            self._zwo_workouts_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
     def _on_parse(self) -> None:
         text = self._text_entry.get("1.0", "end-1c")
@@ -314,6 +342,7 @@ class WorkoutLoader(ctk.CTkFrame):
             display = f"{date} - {name}"
             btn = ctk.CTkButton(
                 self._events_frame, text=display,
+                anchor="w",
                 fg_color="#4a4a4a",
                 command=lambda e=event, eid=event_id, wd=workout_doc: self._on_select_event(eid, wd),
             )
@@ -419,6 +448,7 @@ class WorkoutLoader(ctk.CTkFrame):
             btn = ctk.CTkButton(
                 self._zwo_list_frame,
                 text=file_path.name,
+                anchor="w",
                 fg_color="#4a4a4a",
                 command=lambda path=file_path: self._on_select_zwo_file(path),
             )
