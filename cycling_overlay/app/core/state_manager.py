@@ -25,6 +25,7 @@ class StateManager:
     ) -> None:
         self._state.current_interval = interval
         self._state.interval_elapsed_seconds = elapsed
+        self._state.interval_remaining_seconds = max(0, interval.duration_seconds - elapsed)
         self._state.interval_progress_percent = progress
         if interval.type == "ramp":
             self._state.current_target_power = interval.power_at_elapsed(elapsed)

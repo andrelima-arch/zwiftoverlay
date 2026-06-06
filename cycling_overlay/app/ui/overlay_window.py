@@ -150,7 +150,14 @@ class OverlayWindow(tk.Toplevel):
         power_str = f"{sd.power}w" if sd.power is not None else "---w"
         cadence_str = f"{sd.cadence}rpm" if sd.cadence is not None else "---rpm"
         hr_str = f"{sd.heart_rate}bpm" if sd.heart_rate is not None else "---bpm"
-        self._line1.config(text=f"{power_str} / {cadence_str} / {hr_str}")
+        line1_text = f"{power_str} / {cadence_str} / {hr_str}"
+
+        remaining = state.interval_remaining_seconds
+        if state.engine_state == EngineState.RUNNING and 1 <= remaining <= 5:
+            line1_text += f" | 0:0{remaining}"
+            self._line1.config(text=line1_text, fg="#ffaa00")
+        else:
+            self._line1.config(text=line1_text, fg="white")
 
         if state.current_interval and state.current_target_power is not None:
             target = state.current_interval.target_display

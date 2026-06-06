@@ -19,6 +19,7 @@ class AppState(BaseModel):
     sensor_data: SensorData = SensorData()
     current_interval: WorkoutInterval | None = None
     interval_elapsed_seconds: int = 0
+    interval_remaining_seconds: int = 0
     interval_progress_percent: float = 0.0
     current_target_power: int | None = None
     weight_kg: float | None = None
