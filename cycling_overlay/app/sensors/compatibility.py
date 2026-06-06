@@ -12,6 +12,7 @@ from dataclasses import dataclass
 FTMS_SERVICE_UUID = "00001826-0000-1000-8000-00805f9b34fb"
 POWER_SERVICE_UUID = "00001818-0000-1000-8000-00805f9b34fb"
 CSC_SERVICE_UUID = "00001816-0000-1000-8000-00805f9b34fb"
+RSC_SERVICE_UUID = "00001814-0000-1000-8000-00805f9b34fb"
 HR_SERVICE_UUID = "0000180d-0000-1000-8000-00805f9b34fb"
 
 
@@ -44,57 +45,107 @@ QZ_COMPATIBILITY_RULES: tuple[CompatibilityRule, ...] = (
     CompatibilityRule(
         profile="tacxneo2_like",
         hint="FTMS / Tacx Neo QZ match",
-        prefixes=("TACX NEO", "NEO BIKE", "TACX SMART BIKE"),
+        prefixes=("TACX NEO", "NEO BIKE", "TACX SMART BIKE", "TACX"),
     ),
     CompatibilityRule(
         profile="wahoo_kickr",
         hint="FTMS / Wahoo KICKR QZ match",
-        prefixes=("KICKR", "WAHOO KICKR"),
+        prefixes=("KICKR", "WAHOO KICKR", "WAHOO", "SNAP"),
     ),
     CompatibilityRule(
         profile="elite",
         hint="FTMS / Elite QZ match",
-        prefixes=("ELITE", "DIRETO", "SUITO", "TUO", "JUSTO"),
+        prefixes=("ELITE", "DIRETO", "SUITO", "TUO", "JUSTO", "AVANTI", "STERZO"),
     ),
     CompatibilityRule(
         profile="saris",
         hint="FTMS / Saris QZ match",
-        prefixes=("HAMMER", "MAGNUS", "SARIS"),
+        prefixes=("HAMMER", "MAGNUS", "SARIS", "H3", "H4"),
     ),
     CompatibilityRule(
         profile="jetblack",
         hint="FTMS / JetBlack/Zwift Hub QZ match",
-        prefixes=("ZWIFT HUB", "JETBLACK", "VOLT"),
+        prefixes=("ZWIFT HUB", "JETBLACK", "VOLT", "ZWIFT"),
     ),
     CompatibilityRule(
         profile="magene",
         hint="FTMS / Magene QZ match",
-        prefixes=("MAGENE", "MG-"),
+        prefixes=("MAGENE", "MG-", "GEARBIKE"),
     ),
     CompatibilityRule(
         profile="van_rysel",
         hint="FTMS / Van Rysel QZ match",
-        prefixes=("VANRYSEL-HT", "VAN RYSEL", "D100", "D500"),
+        prefixes=("VANRYSEL-HT", "VAN RYSEL", "D100", "D500", "VANRYSEL"),
     ),
     CompatibilityRule(
         profile="zdrive",
         hint="FTMS / ZDrive QZ match",
-        prefixes=("ZDRIVE",),
+        prefixes=("ZDRIVE", "Z-DRIVE"),
     ),
     CompatibilityRule(
         profile="stages_bike",
         hint="FTMS / Stages Bike QZ match",
-        prefixes=("STAGES BIKE",),
+        prefixes=("STAGES BIKE", "STAGES", "STAGESB"),
     ),
     CompatibilityRule(
         profile="wattbike",
         hint="FTMS / Wattbike QZ match",
-        prefixes=("WATTBIKE",),
+        prefixes=("WATTBIKE", "WATT BIKE", "ATOM"),
     ),
     CompatibilityRule(
         profile="noza",
         hint="FTMS / Xplova/NOZA QZ match",
         prefixes=("NOZA", "XLOVA", "XPLOVA"),
+    ),
+    CompatibilityRule(
+        profile="domyos",
+        hint="FTMS / Domyos QZ match",
+        prefixes=("DOMYOS-BIKE", "DOMYOS-EL", "DOMYOS-TC", "DOMYOS"),
+    ),
+    CompatibilityRule(
+        profile="sole",
+        hint="FTMS / Sole QZ match",
+        prefixes=("SOLE E25", "SOLE E35", "SOLE E95", "SOLE"),
+    ),
+    CompatibilityRule(
+        profile="nautilus",
+        hint="FTMS / Nautilus QZ match",
+        prefixes=("NAUTILUS B", "NAUTILUS E", "NAUTILUS"),
+    ),
+    CompatibilityRule(
+        profile="schwinn",
+        hint="FTMS / Schwinn QZ match",
+        prefixes=("IC BIKE", "SCHWINN", "C7-", "C6-", "170", "130"),
+    ),
+    CompatibilityRule(
+        profile="yesoul",
+        hint="FTMS / Yesoul QZ match",
+        prefixes=("YESOUL", "YESOULBIKE"),
+    ),
+    CompatibilityRule(
+        profile="proform",
+        hint="FTMS / ProForm QZ match",
+        prefixes=("PROFORM", "PRO-FORM", "PF"),
+    ),
+    CompatibilityRule(
+        profile="bowflex",
+        hint="FTMS / Bowflex QZ match",
+        prefixes=("BOWFLEX", "BFX", "C6", "C7", "VELOCORE"),
+    ),
+    CompatibilityRule(
+        profile="cycplus",
+        hint="FTMS / Cycplus QZ match",
+        prefixes=("CYCPLUS", "BC2", "T2", "C6"),
+    ),
+    CompatibilityRule(
+        profile="du30",
+        hint="FTMS / DU30 QZ match",
+        prefixes=("DU30", "SPORT01", "TOPUTURE"),
+    ),
+    CompatibilityRule(
+        profile="fitmetria",
+        hint="FTMS / Fitmetria QZ match",
+        prefixes=("FITFAN", "HEADWIND", "FITMETRIA"),
     ),
 )
 
@@ -149,16 +200,19 @@ def detect_compatibility(name: str, services: list[str]) -> CompatibilityMatch:
     has_ftms = has_uuid(services, FTMS_SERVICE_UUID)
     has_power = has_uuid(services, POWER_SERVICE_UUID)
     has_csc = has_uuid(services, CSC_SERVICE_UUID)
+    has_rsc = has_uuid(services, RSC_SERVICE_UUID)
     has_hr = has_uuid(services, HR_SERVICE_UUID)
 
     if has_ftms:
         return CompatibilityMatch("ftms", rule.profile if rule else "generic_ftms", rule.hint if rule else "")
     if rule:
         return CompatibilityMatch(rule.preferred_service, rule.profile, rule.hint)
-    if has_hr:
-        return CompatibilityMatch("hr", "heart_rate", "")
     if has_power:
         return CompatibilityMatch("power", "cycling_power", "")
     if has_csc:
         return CompatibilityMatch("csc", "csc", "")
+    if has_rsc:
+        return CompatibilityMatch("rsc", "rsc", "")
+    if has_hr:
+        return CompatibilityMatch("hr", "heart_rate", "")
     return CompatibilityMatch("unknown", "", "")

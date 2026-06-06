@@ -190,3 +190,48 @@ def parse_ftms_indoor_bike_data(data: bytes | bytearray) -> FtmsMeasurement:
         values["heart_rate"] = data[offset]
 
     return FtmsMeasurement(values, flags, has_instant_cadence, has_average_cadence)
+
+
+@dataclass(frozen=True)
+class RscMeasurement:
+    speed_mps: float | None = None
+    cadence: int | None = None
+    total_distance: int | None = None
+    truncated: bool = False
+
+
+def parse_rsc_measurement(data: bytes | bytearray) -> RscMeasurement:
+    """Parse Running Speed and Cadence measurement (0x2A53)."""
+    if len(data) < 3:
+        return RscMeasurement(truncated=True)
+
+    flags = data[0]
+    offset = 1
+
+    # Instantaneous Speed is always present (uint16, 1/256 m/s)
+    if offset + 2 > len(data):
+        return RscMeasurement(truncated=True)
+    speed_raw = int.from_bytes(data[offset:offset + 2], "little")
+    speed_mps = speed_raw / 256.0
+    offset += 2
+
+    # Instantaneous Cadence is always present (uint8, 1 rpm)
+    if offset + 1 > len(data):
+        return RscMeasurement(speed_mps=speed_mps, truncated=True)
+    cadence = data[offset]
+    offset += 1
+
+    total_distance = None
+    if flags & 0x01:
+        # Instantaneous Stride Length present (skip 2 bytes)
+        offset += 2
+    if flags & 0x02:
+        # Total Distance present (uint32, meters)
+        if offset + 4 <= len(data):
+            total_distance = int.from_bytes(data[offset:offset + 4], "little")
+
+    return RscMeasurement(
+        speed_mps=round(speed_mps, 2),
+        cadence=cadence,
+        total_distance=total_distance,
+    )

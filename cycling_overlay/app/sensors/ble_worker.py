@@ -8,6 +8,7 @@ from app.sensors.ble_parsers import (
     parse_ftms_indoor_bike_data,
     parse_heart_rate,
     parse_power_measurement,
+    parse_rsc_measurement,
 )
 from app.sensors.compatibility import match_qz_profile
 
@@ -19,6 +20,8 @@ POWER_SERVICE_UUID = "00001818-0000-1000-8000-00805f9b34fb"
 POWER_MEASUREMENT_UUID = "00002a63-0000-1000-8000-00805f9b34fb"
 CSC_SERVICE_UUID = "00001816-0000-1000-8000-00805f9b34fb"
 CSC_MEASUREMENT_UUID = "00002a5b-0000-1000-8000-00805f9b34fb"
+RSC_SERVICE_UUID = "00001814-0000-1000-8000-00805f9b34fb"
+RSC_MEASUREMENT_UUID = "00002a53-0000-1000-8000-00805f9b34fb"
 FTMS_SERVICE_UUID = "00001826-0000-1000-8000-00805f9b34fb"
 FTMS_INDOOR_BIKE_DATA_UUID = "00002ad2-0000-1000-8000-00805f9b34fb"
 
@@ -32,9 +35,10 @@ SERVICE_CHARACTERISTICS = {
     "ftms": FTMS_INDOOR_BIKE_DATA_UUID,
     "power": POWER_MEASUREMENT_UUID,
     "csc": CSC_MEASUREMENT_UUID,
+    "rsc": RSC_MEASUREMENT_UUID,
     "hr": HR_MEASUREMENT_UUID,
 }
-CONNECT_PRIORITY = ("ftms", "power", "csc", "hr")
+CONNECT_PRIORITY = ("ftms", "power", "csc", "rsc", "hr")
 
 
 class BleWorker:
@@ -372,6 +376,8 @@ class BleWorker:
             await self._subscribe_power(client, address, device_info)
         elif service == "csc":
             await self._subscribe_csc(client, address)
+        elif service == "rsc":
+            await self._subscribe_rsc(client, address)
         elif service == "ftms":
             await self._subscribe_ftms(client, address)
         else:
@@ -607,6 +613,24 @@ class BleWorker:
 
         await client.start_notify(CSC_MEASUREMENT_UUID, handler)
         self._record_notify(address, CSC_MEASUREMENT_UUID)
+
+    async def _subscribe_rsc(self, client, address: str) -> None:
+        def handler(_, data: bytearray) -> None:
+            if not self._is_address_active(address):
+                return
+            measurement = parse_rsc_measurement(data)
+            result: dict[str, int | float] = {}
+            if measurement.cadence is not None:
+                result["cadence"] = measurement.cadence
+                self._record_cadence_source(address, "rsc", measurement.cadence)
+            if measurement.speed_mps is not None:
+                # Convert m/s to km/h for display
+                result["speed"] = round(measurement.speed_mps * 3.6, 1)
+            if result:
+                self.sensor_data_changed.emit(address, result)
+
+        await client.start_notify(RSC_MEASUREMENT_UUID, handler)
+        self._record_notify(address, RSC_MEASUREMENT_UUID)
 
     def _calculate_csc_cadence(self, address: str, crank_revs: int, event_time: int) -> int | None:
         now = time.monotonic()
