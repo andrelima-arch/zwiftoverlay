@@ -1,0 +1,89 @@
+#!/bin/sh
+# Pre-push hook for the cycling-overlay repository.
+# Prevents accidental pushes of local credentials, config files, or cached bytecode.
+#
+# To enable:
+#   git config core.hooksPath .githooks
+#
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CYCLING_DIR="${REPO_ROOT}/cycling_overlay"
+
+# 1. Block any config.json inside the project
+config_files=$(find "${CYCLING_DIR}" -maxdepth 4 -name "config.json" -o -name "*.local.json" 2>/dev/null || true)
+if [ -n "$config_files" ]; then
+    echo "${RED}ERROR: Found local config files inside the repository:${NC}"
+    echo "$config_files"
+    echo ""
+    echo "Run: ${YELLOW}python cycling_overlay/scripts/clean-local-data.py${NC}"
+    echo "Then commit the removals and push again."
+    exit 1
+fi
+
+# 2. Check staged files for patterns that look like real athlete IDs or API keys
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$staged_files" ]; then
+    # Patterns:
+    #   i + 5+ digits  (intervals.icu athlete ID, e.g. i194480)
+    #   32+ hex chars  (possible API key)
+    #   40+ alphanumeric (possible token)
+    suspicious=$(echo "$staged_files" | while read -r file; do
+        full_path="${REPO_ROOT}/${file}"
+        if [ -f "$full_path" ]; then
+            # Skip binary files
+            if file "$full_path" | grep -q "text"; then
+                # Check for athlete ID pattern (i + digits)
+                if grep -Pn '"i[0-9]{5,}"' "$full_path" 2>/dev/null; then
+                    echo "$full_path"
+                fi
+                # Check for long hex strings (possible API keys) - but skip test files using placeholders
+                if echo "$file" | grep -vq "test_"; then
+                    if grep -Pn '"[a-f0-9]{32,}"' "$full_path" 2>/dev/null; then
+                        echo "$full_path"
+                    fi
+                fi
+            fi
+        fi
+    done || true)
+
+    if [ -n "$suspicious" ]; then
+        echo "${RED}WARNING: Suspicious data patterns detected in staged files:${NC}"
+        echo "$suspicious"
+        echo ""
+        echo "If these are intentional (e.g., test fixtures), add a # placeholder comment."
+        echo "Otherwise, run: ${YELLOW}python cycling_overlay/scripts/clean-local-data.py${NC}"
+        echo ""
+        echo -n "Do you want to continue pushing? [y/N] "
+        read -r answer
+        case "$answer" in
+            [Yy]*) ;;
+            *) exit 1 ;;
+        esac
+    fi
+fi
+
+# 3. Warn if __pycache__ or .pyc files are staged
+pyc_staged=$(echo "$staged_files" | grep -E '__pycache__|\.pyc$' || true)
+if [ -n "$pyc_staged" ]; then
+    echo "${YELLOW}WARNING: You are about to push Python cache files:${NC}"
+    echo "$pyc_staged"
+    echo ""
+    echo "Run: ${YELLOW}python cycling_overlay/scripts/clean-local-data.py${NC}"
+    echo "Then commit the removals and push again."
+    echo -n "Continue anyway? [y/N] "
+    read -r answer
+    case "$answer" in
+        [Yy]*) ;;
+        *) exit 1 ;;
+    esac
+fi
+
+echo "${GREEN}Pre-push checks passed.${NC}"
+exit 0
