@@ -22,8 +22,8 @@ class MainWindow(ctk.CTk):
         self.profile_changed = Signal(float, int)
         self.language_changed = Signal(str)
         self.title(self._text("app.title"))
-        self.geometry("920x800")
-        self.resizable(True, True)
+        self.geometry("700x500")
+        self.resizable(False, False)
 
         self._active_profile_source = config.profile_source
         initial_weight, initial_ftp = self._get_profile_values(self._active_profile_source)
@@ -33,145 +33,48 @@ class MainWindow(ctk.CTk):
             value=self._choice_from_source_key(config.profile_source)
         )
 
-        top_frame = ctk.CTkFrame(self)
-        top_frame.pack(fill="x", padx=10, pady=(10, 5))
-        top_frame.grid_columnconfigure((0, 1, 2), weight=1, uniform="top")
-        top_frame.grid_columnconfigure(3, weight=0)
-
-        config_frame = ctk.CTkFrame(top_frame)
-        config_frame.grid(row=0, column=0, padx=(5, 3), pady=5, sticky="nsew")
-        config_frame.grid_columnconfigure(1, weight=1)
-
-        sensor_summary_frame = ctk.CTkFrame(top_frame)
-        sensor_summary_frame.grid(row=0, column=1, padx=3, pady=5, sticky="nsew")
-
-        workout_controls_frame = ctk.CTkFrame(top_frame)
-        workout_controls_frame.grid(row=0, column=2, padx=(3, 5), pady=5, sticky="nsew")
-        workout_controls_frame.grid_columnconfigure((0, 1), weight=1)
+        # Compact header: title + language toggle
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(5, 0))
+        header_frame.grid_columnconfigure(0, weight=1)
 
         self._language_button = ctk.CTkButton(
-            top_frame,
+            header_frame,
             text=self._text("language.toggle"),
             width=56,
             command=self._toggle_ui_language,
         )
-        self._language_button.grid(row=0, column=3, padx=(3, 5), pady=5, sticky="ne")
+        self._language_button.grid(row=0, column=0, padx=0, pady=2, sticky="e")
 
-        self._athlete_section_label = ctk.CTkLabel(config_frame, text=self._text("profile.section"), font=ctk.CTkFont(weight="bold"))
-        self._athlete_section_label.grid(
-            row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w"
-        )
-        self._profile_source_label = ctk.CTkLabel(config_frame, text=self._text("profile.source"))
-        self._profile_source_label.grid(row=1, column=0, padx=5, pady=3, sticky="w")
-        self._profile_source_menu = ctk.CTkOptionMenu(
-            config_frame,
-            values=[self._choice_from_source_key("manual"), "Intervals.icu"],
-            variable=self._profile_source_var,
-            command=self._on_profile_source_changed,
-        )
-        self._profile_source_menu.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
-
-        self._weight_label = ctk.CTkLabel(config_frame, text=self._text("profile.weight"))
-        self._weight_label.grid(row=2, column=0, padx=5, pady=3, sticky="w")
-        self._weight_entry = ctk.CTkEntry(config_frame, textvariable=self._weight_var, width=100)
-        self._weight_entry.grid(row=2, column=1, padx=5, pady=3, sticky="ew")
-        self._weight_entry.bind("<FocusOut>", lambda _event: self._apply_manual_profile_from_entries())
-        self._weight_entry.bind("<Return>", lambda _event: self._apply_manual_profile_from_entries())
-        self._weight_value_label = ctk.CTkLabel(config_frame, text="", anchor="w")
-        self._weight_value_label.grid(row=2, column=1, padx=5, pady=3, sticky="ew")
-        self._weight_value_label.grid_remove()
-
-        self._ftp_label = ctk.CTkLabel(config_frame, text=self._text("profile.ftp"))
-        self._ftp_label.grid(row=3, column=0, padx=5, pady=3, sticky="w")
-        self._ftp_entry = ctk.CTkEntry(config_frame, textvariable=self._ftp_var, width=100)
-        self._ftp_entry.grid(row=3, column=1, padx=5, pady=3, sticky="ew")
-        self._ftp_entry.bind("<FocusOut>", lambda _event: self._apply_manual_profile_from_entries())
-        self._ftp_entry.bind("<Return>", lambda _event: self._apply_manual_profile_from_entries())
-        self._ftp_value_label = ctk.CTkLabel(config_frame, text="", anchor="w")
-        self._ftp_value_label.grid(row=3, column=1, padx=5, pady=3, sticky="ew")
-        self._ftp_value_label.grid_remove()
-
-        self._intervals_frame = ctk.CTkFrame(config_frame)
-        self._intervals_frame.grid(row=4, column=0, columnspan=2, padx=5, pady=(2, 5), sticky="ew")
-        self._intervals_frame.grid_columnconfigure(1, weight=1)
-
-        self._intervals_api_key_label = ctk.CTkLabel(self._intervals_frame, text="Intervals API Key:")
-        self._intervals_api_key_label.grid(row=0, column=0, padx=5, pady=4, sticky="w")
-        self._intervals_api_key_entry = ctk.CTkEntry(self._intervals_frame, show="*")
-        self._intervals_api_key_entry.grid(row=0, column=1, padx=5, pady=4, sticky="ew")
-        self._intervals_api_key_entry.insert(0, self._config.intervals_api_key)
-
-        self._intervals_athlete_id_label = ctk.CTkLabel(self._intervals_frame, text="Athlete ID:")
-        self._intervals_athlete_id_label.grid(row=1, column=0, padx=5, pady=4, sticky="w")
-        self._intervals_athlete_id_entry = ctk.CTkEntry(self._intervals_frame)
-        self._intervals_athlete_id_entry.grid(row=1, column=1, padx=5, pady=4, sticky="ew")
-        self._intervals_athlete_id_entry.insert(0, self._config.intervals_athlete_id)
-
-        self._save_intervals_button = ctk.CTkButton(
-            self._intervals_frame,
-            text=self._text("profile.save_intervals"),
-            width=140,
-            command=self._save_and_sync_intervals_credentials,
-        )
-        self._save_intervals_button.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 4), sticky="ew")
-
-        self._profile_sync_status_label = ctk.CTkLabel(
-            self._intervals_frame,
-            text="",
-            font=ctk.CTkFont(size=11),
-            text_color="gray",
-            wraplength=260,
-        )
-        self._profile_sync_status_label.grid(row=3, column=0, columnspan=2, padx=5, pady=(0, 4), sticky="w")
-
-        self._workout_section_label = ctk.CTkLabel(workout_controls_frame, text=self._text("workout.section"), font=ctk.CTkFont(weight="bold"))
-        self._workout_section_label.grid(
-            row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w"
-        )
-        self._workout_info = ctk.CTkLabel(
-            workout_controls_frame,
-            text=self._format_workout_info(self._selected_workout, "workout.imported"),
-            font=ctk.CTkFont(weight="bold"),
-            wraplength=260,
-        )
-        self._workout_info.grid(row=1, column=0, columnspan=2, padx=5, pady=4, sticky="ew")
-
-        self._start_button = ctk.CTkButton(
-            workout_controls_frame, text=self._text("workout.start"),
-            fg_color="#336699", font=ctk.CTkFont(size=14, weight="bold"),
-        )
-        self._start_button.grid(row=2, column=0, padx=(5, 3), pady=(5, 5), sticky="ew")
-
-        self._stop_button = ctk.CTkButton(
-            workout_controls_frame, text=self._text("workout.stop"),
-            fg_color="#cc3333", font=ctk.CTkFont(size=14, weight="bold"),
-        )
-        self._stop_button.grid(row=2, column=1, padx=(3, 5), pady=(5, 5), sticky="ew")
-        self._stop_button.configure(state="disabled")
-
+        # Tabs
         self._tabview = ctk.CTkTabview(self)
-        self._tabview.pack(fill="both", expand=True, padx=10, pady=5)
+        self._tabview.pack(fill="both", expand=True, padx=10, pady=(0, 0))
 
+        self._profile_tab_name = self._text("tab.profile")
         self._workout_tab_name = self._text("tab.workout")
         self._sensor_tab_name = self._text("tab.sensors")
         self._qz_tab_name = self._text("tab.qz")
+        self._profile_tab = self._tabview.add(self._profile_tab_name)
         self._workout_tab = self._tabview.add(self._workout_tab_name)
         self._sensor_tab = self._tabview.add(self._sensor_tab_name)
         self._qz_tab = self._tabview.add(self._qz_tab_name)
 
+        # --- Profile Tab ---
+        self._build_profile_tab()
+
+        # --- Workout Tab ---
         self._workout_loader = WorkoutLoader(ftp=self.ftp, parent=self._workout_tab, config=self._config, language=self._ui_language)
-        self._workout_loader.pack(fill="both", expand=True, padx=5, pady=5)
+        self._workout_loader.pack(fill="both", expand=True, padx=3, pady=3)
         self._workout_loader.workout_loaded.connect(self._on_workout_loaded)
         self._workout_loader.profile_synced.connect(self._on_intervals_profile_synced)
         self._workout_loader.profile_sync_failed.connect(self._on_intervals_profile_sync_failed)
 
+        # --- Sensors Tab ---
         self._sensor_selector = SensorSelector(
             parent=self._sensor_tab,
-            scan_parent=sensor_summary_frame,
-            assigned_parent=sensor_summary_frame,
             language=self._ui_language,
         )
-        self._sensor_selector.pack(fill="both", expand=True, padx=5, pady=5)
+        self._sensor_selector.pack(fill="both", expand=True, padx=3, pady=3)
         self._sensor_selector.scan_button_clicked.connect(self._on_scan)
         self._sensor_selector.device_connect_requested.connect(self._on_connect_device_requested)
         self._sensor_selector.device_disconnect_requested.connect(self._on_disconnect_device_requested)
@@ -183,6 +86,7 @@ class MainWindow(ctk.CTk):
         self._scan_active = False
         self._scan_timeout_after_id = None
 
+        # --- QZ Tab ---
         if not config.qz_wifi_enabled:
             config.qz_wifi_enabled = True
         self._qz_enabled_var = ctk.BooleanVar(value=True)
@@ -195,6 +99,34 @@ class MainWindow(ctk.CTk):
         self._qz_dircon_host_var = ctk.StringVar(value=config.qz_dircon_host)
         self._qz_dircon_port_var = ctk.StringVar(value=str(config.qz_dircon_port))
         self._build_qz_tab()
+
+        # --- Bottom action bar ---
+        bottom_frame = ctk.CTkFrame(self)
+        bottom_frame.pack(fill="x", padx=10, pady=(0, 5))
+        bottom_frame.grid_columnconfigure(2, weight=1)
+
+        self._start_button = ctk.CTkButton(
+            bottom_frame, text=self._text("workout.start"),
+            fg_color="#336699", font=ctk.CTkFont(size=13, weight="bold"),
+            width=100,
+        )
+        self._start_button.grid(row=0, column=0, padx=(5, 3), pady=5, sticky="w")
+
+        self._stop_button = ctk.CTkButton(
+            bottom_frame, text=self._text("workout.stop"),
+            fg_color="#cc3333", font=ctk.CTkFont(size=13, weight="bold"),
+            width=100,
+        )
+        self._stop_button.grid(row=0, column=1, padx=(3, 5), pady=5, sticky="w")
+        self._stop_button.configure(state="disabled")
+
+        self._workout_info = ctk.CTkLabel(
+            bottom_frame,
+            text=self._format_workout_info(self._selected_workout, "workout.imported"),
+            font=ctk.CTkFont(size=11),
+            wraplength=350,
+        )
+        self._workout_info.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
         self._connect_sensor_signals()
         self._on_profile_source_changed(self._profile_source_var.get())
@@ -364,6 +296,85 @@ class MainWindow(ctk.CTk):
 
     def _on_connection_status(self, address: str, status: str) -> None:
         self._sensor_selector.update_connection_status(address, status)
+
+    def _build_profile_tab(self) -> None:
+        """Build the compact Profile tab with athlete settings and Intervals.icu credentials."""
+        frame = ctk.CTkFrame(self._profile_tab, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=3, pady=3)
+        frame.grid_columnconfigure(1, weight=1)
+
+        row = 0
+        self._athlete_section_label = ctk.CTkLabel(frame, text=self._text("profile.section"), font=ctk.CTkFont(weight="bold"))
+        self._athlete_section_label.grid(row=row, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w")
+        row += 1
+
+        self._profile_source_label = ctk.CTkLabel(frame, text=self._text("profile.source"))
+        self._profile_source_label.grid(row=row, column=0, padx=5, pady=2, sticky="w")
+        self._profile_source_menu = ctk.CTkOptionMenu(
+            frame,
+            values=[self._choice_from_source_key("manual"), "Intervals.icu"],
+            variable=self._profile_source_var,
+            command=self._on_profile_source_changed,
+        )
+        self._profile_source_menu.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        row += 1
+
+        self._weight_label = ctk.CTkLabel(frame, text=self._text("profile.weight"))
+        self._weight_label.grid(row=row, column=0, padx=5, pady=2, sticky="w")
+        self._weight_entry = ctk.CTkEntry(frame, textvariable=self._weight_var, width=80)
+        self._weight_entry.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        self._weight_entry.bind("<FocusOut>", lambda _event: self._apply_manual_profile_from_entries())
+        self._weight_entry.bind("<Return>", lambda _event: self._apply_manual_profile_from_entries())
+        self._weight_value_label = ctk.CTkLabel(frame, text="", anchor="w")
+        self._weight_value_label.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        self._weight_value_label.grid_remove()
+        row += 1
+
+        self._ftp_label = ctk.CTkLabel(frame, text=self._text("profile.ftp"))
+        self._ftp_label.grid(row=row, column=0, padx=5, pady=2, sticky="w")
+        self._ftp_entry = ctk.CTkEntry(frame, textvariable=self._ftp_var, width=80)
+        self._ftp_entry.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        self._ftp_entry.bind("<FocusOut>", lambda _event: self._apply_manual_profile_from_entries())
+        self._ftp_entry.bind("<Return>", lambda _event: self._apply_manual_profile_from_entries())
+        self._ftp_value_label = ctk.CTkLabel(frame, text="", anchor="w")
+        self._ftp_value_label.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        self._ftp_value_label.grid_remove()
+        row += 1
+
+        # Intervals.icu credentials
+        self._intervals_frame = ctk.CTkFrame(frame)
+        self._intervals_frame.grid(row=row, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="ew")
+        self._intervals_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        self._intervals_api_key_label = ctk.CTkLabel(self._intervals_frame, text="Intervals API Key:")
+        self._intervals_api_key_label.grid(row=0, column=0, padx=5, pady=3, sticky="w")
+        self._intervals_api_key_entry = ctk.CTkEntry(self._intervals_frame, show="*")
+        self._intervals_api_key_entry.grid(row=0, column=1, padx=5, pady=3, sticky="ew")
+        self._intervals_api_key_entry.insert(0, self._config.intervals_api_key)
+
+        self._intervals_athlete_id_label = ctk.CTkLabel(self._intervals_frame, text="Athlete ID:")
+        self._intervals_athlete_id_label.grid(row=1, column=0, padx=5, pady=3, sticky="w")
+        self._intervals_athlete_id_entry = ctk.CTkEntry(self._intervals_frame)
+        self._intervals_athlete_id_entry.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
+        self._intervals_athlete_id_entry.insert(0, self._config.intervals_athlete_id)
+
+        self._save_intervals_button = ctk.CTkButton(
+            self._intervals_frame,
+            text=self._text("profile.save_intervals"),
+            width=120,
+            command=self._save_and_sync_intervals_credentials,
+        )
+        self._save_intervals_button.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 3), sticky="ew")
+
+        self._profile_sync_status_label = ctk.CTkLabel(
+            self._intervals_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            wraplength=350,
+        )
+        self._profile_sync_status_label.grid(row=3, column=0, columnspan=2, padx=5, pady=(0, 3), sticky="w")
 
     def _build_qz_tab(self) -> None:
         self._qz_status_text = self._text("qz.disconnected")
@@ -709,6 +720,7 @@ class MainWindow(ctk.CTk):
         if "_tabview" not in self.__dict__:
             return
         new_names = {
+            "_profile_tab_name": self._text("tab.profile"),
             "_workout_tab_name": self._text("tab.workout"),
             "_sensor_tab_name": self._text("tab.sensors"),
             "_qz_tab_name": self._text("tab.qz"),
