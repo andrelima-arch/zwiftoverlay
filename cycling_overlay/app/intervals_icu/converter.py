@@ -6,11 +6,34 @@ logger = logging.getLogger(__name__)
 
 
 def convert_workout_doc(workout_doc: dict, title: str = "", ftp: int | None = None) -> Workout:
-    if not workout_doc or "steps" not in workout_doc:
+    if not workout_doc:
         return Workout(title=title, intervals=[])
 
-    intervals = _convert_steps(workout_doc["steps"], ftp)
+    steps = _extract_steps(workout_doc)
+    if not steps:
+        return Workout(title=title, intervals=[])
+
+    intervals = _convert_steps(steps, ftp)
     return Workout(title=title, intervals=intervals)
+
+
+def _extract_steps(workout_doc: dict) -> list[dict]:
+    """Extract and normalize steps from various workout_doc formats."""
+    for key in ("steps", "sets", "blocks"):
+        value = workout_doc.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            try:
+                return [value[k] for k in sorted(value.keys(), key=lambda x: int(x))]
+            except (ValueError, TypeError):
+                return list(value.values())
+
+    logger.warning(
+        "Workout doc has no recognizable steps/sets/blocks: keys=%s",
+        list(workout_doc.keys()),
+    )
+    return []
 
 
 def _convert_steps(steps: list[dict], ftp: int | None = None) -> list[WorkoutInterval]:

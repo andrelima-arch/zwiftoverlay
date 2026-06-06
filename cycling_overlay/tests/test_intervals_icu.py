@@ -100,6 +100,46 @@ class TestIntervalsIcuConverter:
         w = convert_workout_doc({}, title="Empty")
         assert len(w.intervals) == 0
 
+    def test_convert_steps_as_ordered_dict(self):
+        doc = {
+            "steps": {
+                "0": {"duration": 300, "power": {"value": 50, "units": "%ftp"}, "text": "Warmup"},
+                "1": {"duration": 600, "power": {"value": 75, "units": "%ftp"}, "text": "Endurance"},
+            }
+        }
+        w = convert_workout_doc(doc, title="Test", ftp=250)
+        assert len(w.intervals) == 2
+        assert w.intervals[0].name == "Warmup"
+        assert w.intervals[0].duration_seconds == 300
+        assert w.intervals[1].name == "Endurance"
+        assert w.intervals[1].duration_seconds == 600
+
+    def test_convert_steps_as_unordered_dict(self):
+        doc = {
+            "steps": {
+                "2": {"duration": 300, "power": {"value": 50, "units": "%ftp"}, "text": "Cooldown"},
+                "0": {"duration": 300, "power": {"value": 50, "units": "%ftp"}, "text": "Warmup"},
+                "1": {"duration": 600, "power": {"value": 75, "units": "%ftp"}, "text": "Endurance"},
+            }
+        }
+        w = convert_workout_doc(doc, title="Test", ftp=250)
+        assert len(w.intervals) == 3
+        assert w.intervals[0].name == "Warmup"
+        assert w.intervals[1].name == "Endurance"
+        assert w.intervals[2].name == "Cooldown"
+
+    def test_convert_with_sets_key(self):
+        doc = {
+            "sets": [
+                {"duration": 300, "power": {"value": 50, "units": "%ftp"}, "text": "Warmup"},
+                {"duration": 600, "power": {"value": 75, "units": "%ftp"}, "text": "Endurance"},
+            ]
+        }
+        w = convert_workout_doc(doc, title="Test", ftp=250)
+        assert len(w.intervals) == 2
+        assert w.intervals[0].name == "Warmup"
+        assert w.intervals[1].name == "Endurance"
+
     def test_convert_no_steps(self):
         w = convert_workout_doc({"description": "Test"}, title="No Steps")
         assert len(w.intervals) == 0
