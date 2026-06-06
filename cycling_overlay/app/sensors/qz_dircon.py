@@ -606,8 +606,7 @@ class DirconTcpClient:
         if uuid16 == CSC_MEASUREMENT:
             measurement = parse_csc_measurement(payload)
             if measurement.has_crank_data:
-                if measurement.crank_revs == 0:
-                    return {"cadence": self._retained_cadence(0)}
+                had_prior_state = self._csc_state.revolutions is not None
                 rpm = _cadence_from_revolutions(
                     self._csc_state,
                     measurement.crank_revs,
@@ -617,6 +616,9 @@ class DirconTcpClient:
                 )
                 if rpm is not None:
                     return {"cadence": self._retained_cadence(rpm)}
+                # If we had prior state and rpm is None, it means delta == 0 (no advancement).
+                if had_prior_state and measurement.crank_revs is not None and measurement.crank_event_time is not None:
+                    return {"cadence": self._retained_cadence(0)}
             retained = self._retained_cadence(None)
             if retained is not None:
                 return {"cadence": retained}

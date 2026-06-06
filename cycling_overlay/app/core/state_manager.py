@@ -50,6 +50,7 @@ class StateManager:
     def clear_current_interval(self) -> None:
         self._state.current_interval = None
         self._state.interval_elapsed_seconds = 0
+        self._state.interval_remaining_seconds = 0
         self._state.interval_progress_percent = 0.0
         self._state.current_target_power = None
         self.state_changed.emit(self._state)
