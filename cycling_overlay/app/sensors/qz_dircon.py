@@ -383,6 +383,8 @@ class DirconTcpClient:
         self._power_crank_state = CadenceState()
         self._power_wheel_state = CadenceState()
         self._csc_state = CadenceState()
+        self._last_cadence: int | None = None
+        self._cadence_seen_at: float = 0.0
 
     def run(self) -> None:
         source_id = self.device.source_id
@@ -553,15 +555,24 @@ class DirconTcpClient:
         if values:
             self.data_callback(self.device.source_id, values)
 
+    def _retained_cadence(self, new_cadence: int | None) -> int | None:
+        """Retain the last known cadence for up to 2 seconds when no new crank data arrives."""
+        if new_cadence is not None:
+            self._last_cadence = new_cadence
+            self._cadence_seen_at = time.monotonic()
+            return new_cadence
+        if self._last_cadence is not None:
+            if time.monotonic() - self._cadence_seen_at < 2.0:
+                return self._last_cadence
+        return None
+
     def _parse_notification(self, uuid16: int, payload: bytes | bytearray) -> dict[str, int]:
         if uuid16 == POWER_MEASUREMENT:
             measurement = parse_power_measurement(payload)
             result: dict[str, int] = {}
             if measurement.power is not None:
                 result["power"] = measurement.power
-                if measurement.power <= 0:
-                    result["cadence"] = 0
-                    return result
+
             crank_rpm = None
             if measurement.has_crank_data:
                 crank_rpm = _cadence_from_revolutions(
@@ -571,9 +582,10 @@ class DirconTcpClient:
                     time_scale=1024,
                     multiplier=1.0,
                 )
-            if crank_rpm is not None and crank_rpm > 0:
-                result["cadence"] = crank_rpm
+            if crank_rpm is not None:
+                result["cadence"] = self._retained_cadence(crank_rpm)
                 return result
+
             if measurement.has_wheel_data:
                 wheel_rpm = _cadence_from_revolutions(
                     self._power_wheel_state,
@@ -582,13 +594,20 @@ class DirconTcpClient:
                     time_scale=2048,
                     multiplier=0.5,
                 )
-                if wheel_rpm is not None and wheel_rpm > 0:
-                    result["cadence"] = wheel_rpm
+                if wheel_rpm is not None:
+                    result["cadence"] = self._retained_cadence(wheel_rpm)
+                    return result
+
+            retained = self._retained_cadence(None)
+            if retained is not None:
+                result["cadence"] = retained
             return result
+
         if uuid16 == CSC_MEASUREMENT:
             measurement = parse_csc_measurement(payload)
-            rpm = None
             if measurement.has_crank_data:
+                if measurement.crank_revs == 0:
+                    return {"cadence": self._retained_cadence(0)}
                 rpm = _cadence_from_revolutions(
                     self._csc_state,
                     measurement.crank_revs,
@@ -596,7 +615,13 @@ class DirconTcpClient:
                     time_scale=1024,
                     multiplier=1.0,
                 )
-            return {"cadence": rpm} if rpm is not None else {}
+                if rpm is not None:
+                    return {"cadence": self._retained_cadence(rpm)}
+            retained = self._retained_cadence(None)
+            if retained is not None:
+                return {"cadence": retained}
+            return {}
+
         return parse_dircon_notification(uuid16, payload)
 
 

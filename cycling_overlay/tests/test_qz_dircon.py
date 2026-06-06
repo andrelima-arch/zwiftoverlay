@@ -265,3 +265,117 @@ def test_dircon_preconnect_error_is_not_masked_by_disconnected(monkeypatch):
 
     assert statuses[-1] == "Error: connect timed out"
     assert "Disconnected" not in statuses
+
+
+def test_cadence_retained_when_power_zero_but_crank_advances(monkeypatch):
+    """Cadence must NOT be zeroed when power=0 if crank revs are still advancing."""
+    from app.sensors.ble_parsers import PowerMeasurement
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, _status: None,
+        stop_event=threading.Event(),
+    )
+
+    # First packet establishes the crank state (no cadence returned yet)
+    m0 = PowerMeasurement(power=100, has_crank_data=True, crank_revs=100, crank_event_time=1000)
+    # Second packet with power=0 but crank still advancing: revs 100→101, time 1000→1024 (~60rpm)
+    m1 = PowerMeasurement(power=0, has_crank_data=True, crank_revs=101, crank_event_time=1024)
+
+    import app.sensors.qz_dircon as qz_dircon_module
+
+    with monkeypatch.context() as mp:
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m0)
+        client._parse_notification(POWER_MEASUREMENT, b"x")
+
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m1)
+        values = client._parse_notification(POWER_MEASUREMENT, b"x")
+
+    assert values.get("cadence") is not None
+    assert values["cadence"] > 0
+
+
+def test_cadence_zeroed_after_2s_without_crank_data(monkeypatch):
+    """Cadence must go to 0 after >2 seconds without advancing crank revs."""
+    from app.sensors.ble_parsers import PowerMeasurement
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, _status: None,
+        stop_event=threading.Event(),
+    )
+
+    # Establish cadence first with two packets
+    m0 = PowerMeasurement(power=100, has_crank_data=True, crank_revs=100, crank_event_time=1000)
+    m1 = PowerMeasurement(power=100, has_crank_data=True, crank_revs=101, crank_event_time=1024)
+    m2 = PowerMeasurement(power=50, has_crank_data=False)
+
+    import app.sensors.qz_dircon as qz_dircon_module
+    import time
+
+    with monkeypatch.context() as mp:
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m0)
+        client._parse_notification(POWER_MEASUREMENT, b"x")
+
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m1)
+        client._parse_notification(POWER_MEASUREMENT, b"x")
+
+        # Simulate 2.1 seconds passing
+        client._cadence_seen_at = time.monotonic() - 2.1
+
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m2)
+        values = client._parse_notification(POWER_MEASUREMENT, b"x")
+        assert "cadence" not in values
+
+
+def test_cadence_immediate_zero_when_crank_revs_zero():
+    """Cadence must be 0 when crank revs are explicitly 0."""
+    from app.sensors.ble_parsers import CscMeasurement
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, _status: None,
+        stop_event=threading.Event(),
+    )
+
+    import app.sensors.qz_dircon as qz_dircon_module
+    # First packet establishes state with some revs
+    m0 = CscMeasurement(has_crank_data=True, crank_revs=100, crank_event_time=1000)
+    # Second packet with crank_revs=0
+    m1 = CscMeasurement(has_crank_data=True, crank_revs=0, crank_event_time=1000)
+
+    old_parse = qz_dircon_module.parse_csc_measurement
+    def fake_parse(payload):
+        if not hasattr(fake_parse, "call_count"):
+            fake_parse.call_count = 0
+        fake_parse.call_count += 1
+        return m0 if fake_parse.call_count == 1 else m1
+
+    qz_dircon_module.parse_csc_measurement = fake_parse
+    try:
+        client._parse_notification(CSC_MEASUREMENT, b"x")  # establishes state
+        values = client._parse_notification(CSC_MEASUREMENT, b"x")  # crank_revs=0
+        assert values.get("cadence") == 0
+    finally:
+        qz_dircon_module.parse_csc_measurement = old_parse
+
+
+def test_cadence_not_zeroed_by_power_zero_alone(monkeypatch):
+    """Power=0 alone must NOT force cadence to 0 if there is no crank data at all."""
+    from app.sensors.ble_parsers import PowerMeasurement
+    client = DirconTcpClient(
+        DirconDevice(name="QZ Wahoo", host="192.168.1.42", port=36866, serial_number="QZ123"),
+        data_callback=lambda _source, _values: None,
+        status_callback=lambda _source, _status: None,
+        stop_event=threading.Event(),
+    )
+
+    m = PowerMeasurement(power=0, has_crank_data=False)
+
+    import app.sensors.qz_dircon as qz_dircon_module
+
+    with monkeypatch.context() as mp:
+        mp.setattr(qz_dircon_module, "parse_power_measurement", lambda _payload: m)
+        values = client._parse_notification(POWER_MEASUREMENT, b"x")
+        # With no prior cadence and no crank data, cadence should be absent
+        assert "cadence" not in values
