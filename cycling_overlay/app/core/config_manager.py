@@ -1,3 +1,4 @@
+import base64
 import json
 from pathlib import Path
 
@@ -6,6 +7,39 @@ from platformdirs import user_config_dir
 
 APP_NAME = "cycling-overlay"
 SUPPORTED_UI_LANGUAGES = {"en", "pt"}
+
+
+def _encode_sensitive(value: str) -> str:
+    """Obfuscate a sensitive string with base64 (not encryption, just casual protection)."""
+    if not value:
+        return value
+    # Already encoded?
+    try:
+        decoded = base64.b64decode(value.encode(), validate=True).decode("utf-8")
+        if decoded == value:
+            # Not base64, encode it
+            pass
+        else:
+            # It was already base64 and decoded to something different
+            return value
+    except Exception:
+        pass
+    return base64.b64encode(value.encode()).decode()
+
+
+def _decode_sensitive(value: str) -> str:
+    """Deobfuscate a string encoded by _encode_sensitive."""
+    if not value:
+        return value
+    try:
+        decoded = base64.b64decode(value.encode(), validate=True).decode("utf-8")
+        # Simple heuristic: if decoded looks like the original or is obviously wrong, return original
+        # This handles migration from plain-text values
+        if len(decoded) >= len(value) / 2:
+            return decoded
+    except Exception:
+        pass
+    return value
 
 
 class ConfigManager:
@@ -151,12 +185,13 @@ class ConfigManager:
 
     @property
     def intervals_api_key(self) -> str:
-        return str(self._data.get("intervals_api_key", ""))
+        raw = str(self._data.get("intervals_api_key", ""))
+        return _decode_sensitive(raw)
 
     @intervals_api_key.setter
     def intervals_api_key(self, value: str | None) -> None:
         if value:
-            self._data["intervals_api_key"] = value
+            self._data["intervals_api_key"] = _encode_sensitive(value)
         else:
             self._data.pop("intervals_api_key", None)
         self._save()
@@ -367,12 +402,13 @@ class ConfigManager:
 
     @property
     def qz_mqtt_password(self) -> str:
-        return str(self._data.get("qz_mqtt_password", ""))
+        raw = str(self._data.get("qz_mqtt_password", ""))
+        return _decode_sensitive(raw)
 
     @qz_mqtt_password.setter
     def qz_mqtt_password(self, value: str | None) -> None:
         if value:
-            self._data["qz_mqtt_password"] = value
+            self._data["qz_mqtt_password"] = _encode_sensitive(value)
         else:
             self._data.pop("qz_mqtt_password", None)
         self._save()
