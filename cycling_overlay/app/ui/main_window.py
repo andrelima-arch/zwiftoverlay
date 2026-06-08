@@ -685,21 +685,8 @@ class MainWindow(ctk.CTk):
             "_save_intervals_button": self._text("profile.save_intervals"),
             "_intervals_api_key_label": self._text("profile.intervals_api_key"),
             "_intervals_athlete_id_label": self._text("profile.athlete_id"),
-            "_workout_section_label": self._text("workout.section"),
             "_start_button": self._text("workout.start"),
             "_stop_button": self._text("workout.stop"),
-            "_qz_mqtt_enabled_check": self._text("qz.mqtt_enabled"),
-            "_qz_mqtt_port_label": self._text("qz.port"),
-            "_qz_mqtt_username_label": self._text("qz.username"),
-            "_qz_mqtt_password_label": self._text("qz.password"),
-            "_qz_mqtt_connect_button": self._text("qz.connect_mqtt"),
-            "_qz_mqtt_disconnect_button": self._text("qz.disconnect"),
-            "_qz_enabled_check": self._text("qz.wifi_enabled"),
-            "_qz_help_label": self._text("qz.help"),
-            "_qz_dircon_port_label": self._text("qz.port"),
-            "_qz_dircon_manual_button": self._text("qz.connect_dircon_manual"),
-            "_qz_connect_button": self._text("qz.scan"),
-            "_qz_disconnect_button": self._text("qz.disconnect_wifi"),
         }
         for attr, text in text_updates.items():
             widget = self.__dict__.get(attr)

@@ -135,7 +135,7 @@ class WorkoutLoader(ctk.CTkFrame):
 
         self._start_workout_btn = ctk.CTkButton(
             self,
-            text="\u25b6 " + self._text("workout.start"),
+            text=self._text("workout.start"),
             fg_color="#336699",
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self._on_start_clicked,
@@ -167,8 +167,12 @@ class WorkoutLoader(ctk.CTkFrame):
         self._zwo_title_label.configure(text=self._text("loader.zwo_title"))
         self._zwo_select_button.configure(text=self._text("loader.select_folder"))
         self._search_entry.configure(placeholder_text=self._text("loader.search"))
+        self._back_button.configure(text="\u2190 " + self._text("loader.back"))
+        self._start_workout_btn.configure(text=self._text("workout.start"))
         if not self._config or not self._config.last_zwo_folder:
             self._zwo_folder_label.configure(text=self._text("loader.no_folder"))
+        else:
+            self._zwo_folder_label.configure(text=self._config.last_zwo_folder)
 
     def _text(self, key: str, **params) -> str:
         return t(getattr(self, "_language", "en"), key, **params)
