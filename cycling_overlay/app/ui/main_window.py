@@ -139,14 +139,16 @@ class MainWindow(ctk.CTk):
             self.after(500, self._on_startup_scan)
 
     def _hardcoded_workout(self):
+        intervals: list[WorkoutInterval] = [
+            WorkoutInterval(name="Warmup", duration_seconds=840, power_min=112, power_max=186, cadence_target=85, type="ramp"),
+        ]
+        for i in range(1, 7):
+            intervals.append(WorkoutInterval(name="Endurance", duration_seconds=660, power_min=161, power_max=186, cadence_target=88, type="steady", repeat_total=6, repeat_index=i))
+            intervals.append(WorkoutInterval(name="Sprint", duration_seconds=10, power_min=373, power_max=373, cadence_target=110, type="sprint", repeat_total=6, repeat_index=i))
+        intervals.append(WorkoutInterval(name="Cooldown", duration_seconds=540, power_min=161, power_max=112, cadence_target=85, type="ramp"))
         return Workout(
             title=self._text("workout.test_title"),
-            intervals=[
-                WorkoutInterval(name="Warmup", duration_seconds=840, power_min=112, power_max=186, cadence_target=85, type="ramp"),
-                WorkoutInterval(name="Endurance", duration_seconds=660, power_min=161, power_max=186, cadence_target=88, type="steady", repeat_total=6),
-                WorkoutInterval(name="Sprint", duration_seconds=10, power_min=373, power_max=373, cadence_target=110, type="sprint", repeat_total=6),
-                WorkoutInterval(name="Cooldown", duration_seconds=540, power_min=161, power_max=112, cadence_target=85, type="ramp"),
-            ],
+            intervals=intervals,
         )
 
     @property
@@ -347,13 +349,13 @@ class MainWindow(ctk.CTk):
         self._intervals_frame.grid_columnconfigure(1, weight=1)
         row += 1
 
-        self._intervals_api_key_label = ctk.CTkLabel(self._intervals_frame, text="Intervals API Key:")
+        self._intervals_api_key_label = ctk.CTkLabel(self._intervals_frame, text=self._text("profile.intervals_api_key"))
         self._intervals_api_key_label.grid(row=0, column=0, padx=5, pady=3, sticky="w")
         self._intervals_api_key_entry = ctk.CTkEntry(self._intervals_frame, show="*")
         self._intervals_api_key_entry.grid(row=0, column=1, padx=5, pady=3, sticky="ew")
         self._intervals_api_key_entry.insert(0, self._config.intervals_api_key)
 
-        self._intervals_athlete_id_label = ctk.CTkLabel(self._intervals_frame, text="Athlete ID:")
+        self._intervals_athlete_id_label = ctk.CTkLabel(self._intervals_frame, text=self._text("profile.athlete_id"))
         self._intervals_athlete_id_label.grid(row=1, column=0, padx=5, pady=3, sticky="w")
         self._intervals_athlete_id_entry = ctk.CTkEntry(self._intervals_frame)
         self._intervals_athlete_id_entry.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
@@ -399,7 +401,7 @@ class MainWindow(ctk.CTk):
         try:
             self._sensor_reader.scan_qz_wifi()
         except Exception as exc:
-            self._on_qz_connection_status(f"QZ Wi-Fi erro: {exc}")
+            self._on_qz_connection_status(self._text("qz.wifi_error", error=exc))
 
     def _disconnect_qz_wifi(self) -> None:
         self._sensor_reader.disconnect_qz_wifi()
@@ -681,6 +683,8 @@ class MainWindow(ctk.CTk):
             "_weight_label": self._text("profile.weight"),
             "_ftp_label": self._text("profile.ftp"),
             "_save_intervals_button": self._text("profile.save_intervals"),
+            "_intervals_api_key_label": self._text("profile.intervals_api_key"),
+            "_intervals_athlete_id_label": self._text("profile.athlete_id"),
             "_workout_section_label": self._text("workout.section"),
             "_start_button": self._text("workout.start"),
             "_stop_button": self._text("workout.stop"),

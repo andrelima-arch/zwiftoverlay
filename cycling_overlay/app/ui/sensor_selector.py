@@ -3,11 +3,6 @@ import customtkinter as ctk
 from app.core.events import Signal
 from app.ui.i18n import normalize_language, t
 
-NETWORK_SERVICE_LABELS = {
-    "qz_dircon": "QZ Wi-Fi / Wahoo DIRCON",
-    "qz_websocket": "QZ Wi-Fi / Android app",
-}
-
 AVAILABLE_GROUPS = ("saved", "queued", "recent", "unknown")
 
 
@@ -75,7 +70,7 @@ class SensorSelector(ctk.CTkFrame):
 
         self._selected_title_label = ctk.CTkLabel(assigned_frame, text=self._text("sensor.selected"), font=ctk.CTkFont(weight="bold"))
         self._selected_title_label.pack(anchor="w", padx=5)
-        self._hr_label = ctk.CTkLabel(assigned_frame, text=f"HR: {self._text('sensor.none')}")
+        self._hr_label = ctk.CTkLabel(assigned_frame, text=f"{self._text('sensor.hr_label')} {self._text('sensor.none')}")
         self._hr_label.pack(anchor="w", padx=10)
         self._power_label = ctk.CTkLabel(assigned_frame, text=f"{self._text('sensor.power')}: {self._text('sensor.none')}")
         self._power_label.pack(anchor="w", padx=10)
@@ -238,7 +233,7 @@ class SensorSelector(ctk.CTkFrame):
         self.scan_button_clicked.emit()
 
     def _refresh_assigned_labels(self) -> None:
-        self._hr_label.configure(text=f"HR: {self._label_for_address(self._hr_address)}")
+        self._hr_label.configure(text=f"{self._text('sensor.hr_label')} {self._label_for_address(self._hr_address)}")
         self._power_label.configure(text=f"{self._text('sensor.power')}: {self._label_for_address(self._power_address)}")
         self._csc_label.configure(text=f"{self._text('sensor.cadence')}: {self._label_for_address(self._csc_address)}")
         self._ftms_label.configure(text=f"{self._text('sensor.smart_trainer')}: {self._label_for_address(self._ftms_address)}")
@@ -346,11 +341,7 @@ class SensorSelector(ctk.CTkFrame):
             self._device_seen_generation[device.address] = self._scan_generation
 
     def _render_device(self, device) -> None:
-        from app.sensors.scanner import SERVICE_LABELS
-        service_label = NETWORK_SERVICE_LABELS.get(
-            device.service_type,
-            SERVICE_LABELS.get(device.service_type, device.service_type),
-        )
+        service_label = self._service_label_text(device.service_type)
         details = self._known_devices.get(device.address)
         saved = self._is_saved_device(device)
         known = details is not None or self._matches_known_identity(device)
@@ -359,6 +350,15 @@ class SensorSelector(ctk.CTkFrame):
         known_label = self._text("sensor.saved") if saved else self._text("sensor.recent") if known else self._text("sensor.new")
         display = f"{device.display_name} [{service_label}] [{known_label}]"
         self._render_device_button(device.address, display, known, saved, device.service_type)
+
+    def _service_label_text(self, service_type: str) -> str:
+        network_keys = {"qz_dircon": "sensor.qz_dircon_label", "qz_websocket": "sensor.qz_websocket_label"}
+        service_keys = {"hr": "sensor.service_hr", "power": "sensor.service_power", "csc": "sensor.service_csc", "ftms": "sensor.service_ftms", "unknown": "sensor.service_unknown"}
+        if service_type in network_keys:
+            return self._text(network_keys[service_type])
+        if service_type in service_keys:
+            return self._text(service_keys[service_type])
+        return service_type
 
     def _button_color(self, address: str, known: bool, saved: bool, service_type: str) -> str:
         status = self._connection_states.get(address, "")

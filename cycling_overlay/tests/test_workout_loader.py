@@ -30,9 +30,8 @@ def test_workout_loader_fetch_intervals_workouts_uses_config_credentials(monkeyp
     config = SimpleNamespace(intervals_api_key="api-key", intervals_athlete_id="athlete-id")
     loader = object.__new__(WorkoutLoader)
     loader._config = config
-    loader._fetch_button = SimpleNamespace(configure=lambda **_kwargs: None)
     loader._api_status_label = SimpleNamespace(configure=lambda **_kwargs: None)
-    loader._events_frame = SimpleNamespace(winfo_children=lambda: [])
+    loader._list_frame = SimpleNamespace(winfo_children=lambda: [])
     started = []
 
     class FakeThread:
@@ -120,9 +119,8 @@ def test_workout_loader_intervals_buttons_align_text_left(monkeypatch):
 
     loader = object.__new__(WorkoutLoader)
     loader._language = "en"
-    loader._fetch_button = SimpleNamespace(configure=lambda **_kwargs: None)
     loader._api_status_label = SimpleNamespace(configure=lambda **_kwargs: None)
-    loader._events_frame = SimpleNamespace(winfo_children=lambda: [])
+    loader._list_frame = SimpleNamespace(winfo_children=lambda: [])
     monkeypatch.setattr("app.ui.workout_loader.ctk.CTkButton", FakeButton)
 
     WorkoutLoader._show_events(
@@ -157,7 +155,7 @@ def test_workout_loader_zwo_buttons_align_text_left(monkeypatch):
     loader._zwo_files = []
     loader._zwo_folder_label = SimpleNamespace(configure=lambda **_kwargs: None)
     loader._zwo_status_label = SimpleNamespace(configure=lambda **_kwargs: None)
-    loader._zwo_list_frame = SimpleNamespace(winfo_children=lambda: [])
+    loader._list_frame = SimpleNamespace(winfo_children=lambda: [])
     monkeypatch.setattr("app.ui.workout_loader.ctk.CTkButton", FakeButton)
     monkeypatch.setattr(
         "app.ui.workout_loader.find_zwo_files",
