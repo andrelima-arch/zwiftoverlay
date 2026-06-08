@@ -76,16 +76,16 @@ class OverlayWindow(tk.Toplevel):
         self._info_frame = tk.Frame(self._main, bg="black")
         self._info_frame.grid(row=0, column=0, sticky="nsew")
 
-        self._countdown_frame = tk.Frame(self._main, bg="black", width=90)
+        self._countdown_frame = tk.Frame(self._info_frame, bg="black", width=75)
         self._countdown_label = tk.Label(
             self._countdown_frame,
             text="",
             fg="#ffaa00",
             bg="black",
-            font=("Consolas", 42, "bold"),
+            font=("Consolas", 36, "bold"),
             anchor="center",
         )
-        self._countdown_label.pack(expand=True, fill="both")
+        self._countdown_label.pack(expand=True, fill="both", padx=1)
 
         self._line1 = tk.Label(
             self._info_frame, text="---w / ---rpm / ---bpm",
@@ -142,8 +142,6 @@ class OverlayWindow(tk.Toplevel):
         self._bind_drag(self._info_frame)
         self._bind_drag(self._line1)
         self._bind_drag(self._line2)
-        self._bind_drag(self._countdown_frame)
-        self._bind_drag(self._countdown_label)
 
         self.geometry("+{}+{}".format(
             self.winfo_screenwidth() - 320,
@@ -183,8 +181,6 @@ class OverlayWindow(tk.Toplevel):
     def _resize(self) -> None:
         self.update_idletasks()
         w = self._info_frame.winfo_reqwidth() + 16
-        if self._countdown_visible:
-            w += self._countdown_frame.winfo_reqwidth() + 10
         h = self._info_frame.winfo_reqheight() + 4
         x = self.winfo_x()
         y = self.winfo_y()
@@ -195,14 +191,14 @@ class OverlayWindow(tk.Toplevel):
         self._countdown_label.configure(text=text)
         if not self._countdown_visible:
             self._countdown_visible = True
-            self._countdown_frame.grid(row=0, column=1, sticky="ns", padx=(2, 8))
+            self._countdown_frame.pack(side="right", fill="y", padx=(4, 0))
             self._resize()
 
     def _hide_countdown(self) -> None:
         if self._countdown_visible:
             self._countdown_visible = False
             self._countdown_label.configure(text="")
-            self._countdown_frame.grid_remove()
+            self._countdown_frame.pack_forget()
             self._resize()
 
     def update_state(self, state) -> None:
