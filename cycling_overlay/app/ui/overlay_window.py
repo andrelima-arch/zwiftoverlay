@@ -3,16 +3,18 @@ import tkinter.font as tkfont
 
 from app.ui.i18n import normalize_language, t
 
+COUNTDOWN_SECONDS = 10
+
 
 class MarqueeLabel(tk.Canvas):
-    def __init__(self, parent, text="", fg="white", bg="#000000", font=("Consolas", 11, "bold"), **kwargs):
-        super().__init__(parent, bg=bg, highlightthickness=0, height=22, **kwargs)
+    def __init__(self, parent, text="", fg="white", bg="#000000", font=("Consolas", 10, "bold"), **kwargs):
+        super().__init__(parent, bg=bg, highlightthickness=0, height=20, **kwargs)
         self._text = text
         self._fg = fg
         self._font = tkfont.Font(font=font)
         self._x = 0
         self._after_id = None
-        self._item = self.create_text(0, 11, text=text, fill=fg, font=self._font, anchor="w")
+        self._item = self.create_text(0, 10, text=text, fill=fg, font=self._font, anchor="w")
         self.bind("<Configure>", lambda _: self._reset_position())
         self._schedule_tick()
 
@@ -27,7 +29,7 @@ class MarqueeLabel(tk.Canvas):
         width = self.winfo_width()
         text_width = self._font.measure(self._text)
         self._x = max((width - text_width) // 2, 0)
-        self.coords(self._item, self._x, 11)
+        self.coords(self._item, self._x, 10)
 
     def _tick(self) -> None:
         width = self.winfo_width()
@@ -36,7 +38,7 @@ class MarqueeLabel(tk.Canvas):
             self._x -= 2
             if self._x < -text_width:
                 self._x = width
-            self.coords(self._item, self._x, 11)
+            self.coords(self._item, self._x, 10)
         self._schedule_tick()
 
     def _schedule_tick(self) -> None:
@@ -53,9 +55,13 @@ class MarqueeLabel(tk.Canvas):
 
 
 class OverlayWindow(tk.Toplevel):
-    def __init__(self, language: str = "en") -> None:
+    def __init__(self, language: str = "en", on_skip_forward=None, on_skip_backward=None) -> None:
         super().__init__()
         self._language = normalize_language(language)
+        self._on_skip_forward = on_skip_forward
+        self._on_skip_backward = on_skip_backward
+        self._countdown_visible = False
+
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.attributes("-transparentcolor", "")
@@ -64,47 +70,91 @@ class OverlayWindow(tk.Toplevel):
         self._drag_x = None
         self._drag_y = None
 
-        self._line1 = tk.Label(
-            self, text="---w / ---rpm / ---bpm",
-            fg="white", bg="#000000",
-            font=("Consolas", 16, "bold"),
+        self._main = tk.Frame(self, bg="black")
+        self._main.pack(fill="both", expand=True)
+
+        self._info_frame = tk.Frame(self._main, bg="black")
+        self._info_frame.grid(row=0, column=0, sticky="nsew")
+
+        self._countdown_frame = tk.Frame(self._main, bg="black", width=90)
+        self._countdown_label = tk.Label(
+            self._countdown_frame,
+            text="",
+            fg="#ffaa00",
+            bg="black",
+            font=("Consolas", 42, "bold"),
             anchor="center",
         )
-        self._line1.pack(fill="x", padx=10, pady=(8, 2))
+        self._countdown_label.pack(expand=True, fill="both")
+
+        self._line1 = tk.Label(
+            self._info_frame, text="---w / ---rpm / ---bpm",
+            fg="white", bg="#000000",
+            font=("Consolas", 14, "bold"),
+            anchor="w",
+        )
+        self._line1.pack(fill="x", padx=(8, 4), pady=(4, 1))
 
         self._line2 = tk.Label(
-            self, text="---w / --- w/kg",
+            self._info_frame, text="---w / --- w/kg / ---rpm",
             fg="#00ff88", bg="#000000",
-            font=("Consolas", 16, "bold"),
-            anchor="center",
+            font=("Consolas", 14, "bold"),
+            anchor="w",
         )
-        self._line2.pack(fill="x", padx=10, pady=2)
+        self._line2.pack(fill="x", padx=(8, 4), pady=1)
 
-        self._line3 = MarqueeLabel(
-            self,
+        self._nav_frame = tk.Frame(self._info_frame, bg="black")
+
+        self._btn_prev = tk.Button(
+            self._nav_frame, text="◀",
+            fg="#4a4a4a", bg="#111111", activebackground="#222222", activeforeground="#ffffff",
+            font=("Consolas", 10, "bold"),
+            relief="flat", borderwidth=0,
+            command=self._on_skip_backward,
+            padx=6, pady=1,
+        )
+        self._btn_prev.pack(side="left", padx=(0, 4))
+
+        self._btn_next = tk.Button(
+            self._nav_frame, text="▶",
+            fg="#4a4a4a", bg="#111111", activebackground="#222222", activeforeground="#ffffff",
+            font=("Consolas", 10, "bold"),
+            relief="flat", borderwidth=0,
+            command=self._on_skip_forward,
+            padx=6, pady=1,
+        )
+        self._btn_next.pack(side="left", padx=(4, 0))
+
+        self._line4 = MarqueeLabel(
+            self._info_frame,
             text="",
             fg="#ffaa00", bg="#000000",
-            font=("Consolas", 11, "bold"),
+            font=("Consolas", 10, "bold"),
         )
-        self._line3.pack(fill="x", padx=10, pady=(2, 8))
+        self._line4.pack(fill="x", padx=(8, 4), pady=(1, 4))
+
+        self._nav_frame.pack_forget()
+
+        self._main.grid_columnconfigure(0, weight=1)
+
+        self._bind_drag(self)
+        self._bind_drag(self._main)
+        self._bind_drag(self._info_frame)
+        self._bind_drag(self._line1)
+        self._bind_drag(self._line2)
+        self._bind_drag(self._countdown_frame)
+        self._bind_drag(self._countdown_label)
 
         self.geometry("+{}+{}".format(
             self.winfo_screenwidth() - 320,
             20,
         ))
         self.update_idletasks()
-        w = self._line1.winfo_reqwidth() + 24
-        h = self._line1.winfo_reqheight() + self._line2.winfo_reqheight() + self._line3.winfo_reqheight() + 20
-        self.geometry(f"{w}x{h}+{self.winfo_screenwidth() - w - 20}+20")
+        self._resize()
 
-        self._line1.bind("<ButtonPress-1>", self._on_press)
-        self._line1.bind("<B1-Motion>", self._on_drag)
-        self._line2.bind("<ButtonPress-1>", self._on_press)
-        self._line2.bind("<B1-Motion>", self._on_drag)
-        self._line3.bind("<ButtonPress-1>", self._on_press)
-        self._line3.bind("<B1-Motion>", self._on_drag)
-        self.bind("<ButtonPress-1>", self._on_press)
-        self.bind("<B1-Motion>", self._on_drag)
+    def _bind_drag(self, widget) -> None:
+        widget.bind("<ButtonPress-1>", self._on_press)
+        widget.bind("<B1-Motion>", self._on_drag)
 
     def set_language(self, language: str) -> None:
         self._language = normalize_language(language)
@@ -122,20 +172,64 @@ class OverlayWindow(tk.Toplevel):
             y = self.winfo_y() + event.y - self._drag_y
             self.geometry(f"+{x}+{y}")
 
+    def _on_skip_forward(self) -> None:
+        if self._on_skip_forward:
+            self._on_skip_forward()
+
+    def _on_skip_backward(self) -> None:
+        if self._on_skip_backward:
+            self._on_skip_backward()
+
+    def _resize(self) -> None:
+        self.update_idletasks()
+        w = self._info_frame.winfo_reqwidth() + 16
+        if self._countdown_visible:
+            w += self._countdown_frame.winfo_reqwidth() + 10
+        h = self._info_frame.winfo_reqheight() + 4
+        x = self.winfo_x()
+        y = self.winfo_y()
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _show_countdown(self, remaining: int) -> None:
+        text = f"0:{remaining:02d}" if remaining >= 10 else f"0:0{remaining}"
+        self._countdown_label.configure(text=text)
+        if not self._countdown_visible:
+            self._countdown_visible = True
+            self._countdown_frame.grid(row=0, column=1, sticky="ns", padx=(2, 8))
+            self._resize()
+
+    def _hide_countdown(self) -> None:
+        if self._countdown_visible:
+            self._countdown_visible = False
+            self._countdown_label.configure(text="")
+            self._countdown_frame.grid_remove()
+            self._resize()
+
     def update_state(self, state) -> None:
         from app.models.app_state import EngineState
         sd = state.sensor_data
 
+        in_workout = state.engine_state in (EngineState.RUNNING, EngineState.PAUSED, EngineState.BETWEEN_INTERVALS)
+        if in_workout and not self._nav_frame.winfo_ismapped():
+            self._nav_frame.pack(fill="x", padx=(8, 4), pady=1, before=self._line4)
+        elif not in_workout and self._nav_frame.winfo_ismapped():
+            self._nav_frame.pack_forget()
+
+        remaining = state.interval_remaining_seconds
+
         if state.engine_state == EngineState.PAUSED:
-            self._line1.config(text="---w / ---rpm / ---bpm")
+            self._hide_countdown()
+            self._line1.config(text="---w / ---rpm / ---bpm", fg="white")
             self._line2.config(text=self._text("overlay.paused"), fg="#ffaa00")
             if state.current_interval:
                 pct = int(state.interval_progress_percent * 100)
-                self._line3.set_text(self._text("overlay.interval_progress", pct=pct))
+                self._line4.set_text(self._text("overlay.interval_progress", pct=pct))
+            self._resize()
             return
 
         if state.engine_state == EngineState.BETWEEN_INTERVALS:
-            self._line1.config(text="---w / ---rpm / ---bpm")
+            self._hide_countdown()
+            self._line1.config(text="---w / ---rpm / ---bpm", fg="white")
             next_name = ""
             if state.current_interval:
                 next_name = state.current_interval.name
@@ -144,7 +238,8 @@ class OverlayWindow(tk.Toplevel):
                 if ri and rt:
                     next_name = f"{next_name} {ri}/{rt}"
             self._line2.config(text=self._text("overlay.next", name=next_name), fg="#ffaa00")
-            self._line3.set_text(self._text("overlay.pedal_start"))
+            self._line4.set_text(self._text("overlay.pedal_start"))
+            self._resize()
             return
 
         power_str = f"{sd.power}w" if sd.power is not None else "---w"
@@ -152,9 +247,12 @@ class OverlayWindow(tk.Toplevel):
         hr_str = f"{sd.heart_rate}bpm" if sd.heart_rate is not None else "---bpm"
         line1_text = f"{power_str} / {cadence_str} / {hr_str}"
 
-        remaining = state.interval_remaining_seconds
-        if state.engine_state == EngineState.RUNNING and 1 <= remaining <= 5:
-            line1_text += f" | 0:0{remaining}"
+        if state.engine_state == EngineState.RUNNING and 1 <= remaining <= COUNTDOWN_SECONDS:
+            self._show_countdown(remaining)
+        else:
+            self._hide_countdown()
+
+        if state.engine_state == EngineState.RUNNING and 1 <= remaining <= COUNTDOWN_SECONDS:
             self._line1.config(text=line1_text, fg="#ffaa00")
         else:
             self._line1.config(text=line1_text, fg="white")
@@ -162,20 +260,25 @@ class OverlayWindow(tk.Toplevel):
         if state.current_interval and state.current_target_power is not None:
             target = state.current_interval.target_display
             wkg_str = f"{state.w_per_kg} w/kg" if state.w_per_kg is not None else "--- w/kg"
-            self._line2.config(text=f"{target} / {wkg_str}", fg="#00ff88")
+            rpm_target = state.current_interval.cadence_target
+            rpm_str = f"{rpm_target}rpm" if rpm_target is not None else "---rpm"
+            self._line2.config(text=f"{target} / {wkg_str} / {rpm_str}", fg="#00ff88")
         elif state.current_interval is None and state.engine_state == EngineState.FINISHED:
+            self._hide_countdown()
             self._line2.config(text=self._text("overlay.finished"), fg="#00ff88")
         else:
             wkg_str = f"{state.w_per_kg} w/kg" if state.w_per_kg is not None else "--- w/kg"
-            self._line2.config(text=f"---w / {wkg_str}", fg="#00ff88")
+            self._line2.config(text=f"---w / {wkg_str} / ---rpm", fg="#00ff88")
 
         if state.current_interval:
             name = state.current_interval.name
             ri = state.current_interval.repeat_index
             rt = state.current_interval.repeat_total
             if ri and rt:
-                self._line3.set_text(f"{name} {ri}/{rt}")
+                self._line4.set_text(f"{name} {ri}/{rt}")
             else:
-                self._line3.set_text(name)
+                self._line4.set_text(name)
         else:
-            self._line3.set_text("")
+            self._line4.set_text("")
+
+        self._resize()
