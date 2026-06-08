@@ -91,17 +91,17 @@ class OverlayWindow(tk.Toplevel):
             self._info_frame, text="---w / ---rpm / ---bpm",
             fg="white", bg="#000000",
             font=("Consolas", 14, "bold"),
-            anchor="w",
+            anchor="center",
         )
-        self._line1.pack(fill="x", padx=(8, 4), pady=(4, 1))
+        self._line1.pack(fill="x", padx=(4, 4), pady=(4, 1))
 
         self._line2 = tk.Label(
             self._info_frame, text="---w / --- w/kg / ---rpm",
             fg="#00ff88", bg="#000000",
             font=("Consolas", 14, "bold"),
-            anchor="w",
+            anchor="center",
         )
-        self._line2.pack(fill="x", padx=(8, 4), pady=1)
+        self._line2.pack(fill="x", padx=(4, 4), pady=1)
 
         self._nav_frame = tk.Frame(self._info_frame, bg="black")
 
@@ -131,11 +131,9 @@ class OverlayWindow(tk.Toplevel):
             fg="#ffaa00", bg="#000000",
             font=("Consolas", 10, "bold"),
         )
-        self._line4.pack(fill="x", padx=(8, 4), pady=(1, 4))
+        self._line4.pack(fill="x", padx=(4, 4), pady=(1, 4))
 
         self._nav_frame.pack_forget()
-
-        self._main.grid_columnconfigure(0, weight=1)
 
         self._bind_drag(self)
         self._bind_drag(self._main)
@@ -182,7 +180,7 @@ class OverlayWindow(tk.Toplevel):
 
     def _resize(self) -> None:
         self.update_idletasks()
-        w = self._info_frame.winfo_reqwidth() + 16
+        w = self._info_frame.winfo_reqwidth() + 8
         if self._countdown_visible:
             w += self._countdown_frame.winfo_reqwidth() + 4
         h = self._info_frame.winfo_reqheight() + 4
@@ -211,7 +209,7 @@ class OverlayWindow(tk.Toplevel):
 
         in_workout = state.engine_state in (EngineState.RUNNING, EngineState.PAUSED, EngineState.BETWEEN_INTERVALS)
         if in_workout and not self._nav_frame.winfo_ismapped():
-            self._nav_frame.pack(fill="x", padx=(8, 4), pady=1, before=self._line4)
+            self._nav_frame.pack(fill="x", padx=(4, 4), pady=1, before=self._line4)
         elif not in_workout and self._nav_frame.winfo_ismapped():
             self._nav_frame.pack_forget()
 
