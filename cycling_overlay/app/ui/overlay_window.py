@@ -93,7 +93,7 @@ class OverlayWindow(tk.Toplevel):
             font=("Consolas", 14, "bold"),
             anchor="center",
         )
-        self._line1.pack(fill="x", padx=(1, 1), pady=(4, 1))
+        self._line1.pack(fill="x", padx=(0, 0), pady=(4, 1))
 
         self._line2 = tk.Label(
             self._info_frame, text="---w / --- w/kg / ---rpm",
@@ -101,7 +101,7 @@ class OverlayWindow(tk.Toplevel):
             font=("Consolas", 14, "bold"),
             anchor="center",
         )
-        self._line2.pack(fill="x", padx=(1, 1), pady=1)
+        self._line2.pack(fill="x", padx=(0, 0), pady=1)
 
         self._nav_frame = tk.Frame(self._info_frame, bg="black")
 
@@ -131,7 +131,7 @@ class OverlayWindow(tk.Toplevel):
             fg="#ffaa00", bg="#000000",
             font=("Consolas", 10, "bold"),
         )
-        self._line4.pack(fill="x", padx=(1, 1), pady=(1, 4))
+        self._line4.pack(fill="x", padx=(0, 0), pady=(1, 4))
 
         self._nav_frame.pack_forget()
 
@@ -180,7 +180,7 @@ class OverlayWindow(tk.Toplevel):
 
     def _resize(self) -> None:
         self.update_idletasks()
-        w = self._info_frame.winfo_reqwidth() + 2
+        w = self._info_frame.winfo_reqwidth()
         if self._countdown_visible:
             w += self._countdown_frame.winfo_reqwidth() + 4
         h = self._info_frame.winfo_reqheight() + 4
@@ -209,7 +209,7 @@ class OverlayWindow(tk.Toplevel):
 
         in_workout = state.engine_state in (EngineState.RUNNING, EngineState.PAUSED, EngineState.BETWEEN_INTERVALS)
         if in_workout and not self._nav_frame.winfo_ismapped():
-            self._nav_frame.pack(padx=(1, 1), pady=1, before=self._line4)
+            self._nav_frame.pack(padx=(0, 0), pady=1, before=self._line4)
         elif not in_workout and self._nav_frame.winfo_ismapped():
             self._nav_frame.pack_forget()
 
