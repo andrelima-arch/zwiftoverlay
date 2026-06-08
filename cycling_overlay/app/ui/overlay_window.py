@@ -130,6 +130,7 @@ class OverlayWindow(tk.Toplevel):
             text="",
             fg="#ffaa00", bg="#000000",
             font=("Consolas", 10, "bold"),
+            width=1,
         )
         self._line4.pack(fill="x", padx=(0, 0), pady=(1, 4))
 
