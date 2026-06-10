@@ -29,7 +29,7 @@ PUMP_INTERVAL_MS = 50
 CONNECT_RETRIES = 2
 CONNECT_RETRY_DELAY_SECONDS = 1.0
 CONNECT_TIMEOUT_SECONDS = 20.0
-CADENCE_RETENTION_SECONDS = 1.0
+CADENCE_RETENTION_SECONDS = 2.0
 
 SERVICE_CHARACTERISTICS = {
     "ftms": FTMS_INDOOR_BIKE_DATA_UUID,
@@ -496,7 +496,6 @@ class BleWorker:
                 result = {"power": measurement.power}
                 wheel_cadence = None
                 crank_cadence = None
-                stopped = measurement.power <= 0
                 if (
                     measurement.has_wheel_data
                     and measurement.wheel_revs is not None
@@ -521,11 +520,7 @@ class BleWorker:
                     if self._is_valid_crank_cadence(cadence, wheel_cadence):
                         crank_cadence = cadence
 
-                if stopped:
-                    result["cadence"] = 0
-                    self._clear_last_cadence(address)
-                    self._record_cadence_source(address, "power_stop", 0)
-                elif self._is_moving_cadence(crank_cadence):
+                if self._is_moving_cadence(crank_cadence):
                     result["cadence"] = crank_cadence
                     self._record_cadence_source(address, "power_crank", crank_cadence)
                 elif self._is_moving_cadence(wheel_cadence):
@@ -569,7 +564,7 @@ class BleWorker:
         if delta_revs == 0 or delta_time == 0:
             if now - previous_seen >= 2.0:
                 return 0
-            return 0
+            return None
 
         cadence = delta_revs * 1024 * 60 / delta_time
         return max(0, round(cadence))
@@ -587,7 +582,7 @@ class BleWorker:
         if delta_revs == 0 or delta_time == 0:
             if now - previous_seen >= 2.0:
                 return 0
-            return 0
+            return None
 
         # QZ uses wheel revolutions as a ThinkRider/Tacx-like cadence fallback.
         cadence = delta_revs * 2048 * 60 / delta_time / 2
@@ -645,7 +640,7 @@ class BleWorker:
         if delta_revs == 0 or delta_time == 0:
             if now - previous_seen >= 2.0:
                 return 0
-            return 0
+            return None
 
         cadence = delta_revs * 1024 * 60 / delta_time
         return max(0, round(cadence))
@@ -659,30 +654,25 @@ class BleWorker:
             if "cadence" in result:
                 self._record_cadence_source(address, "ftms", result["cadence"])
             if "power" in result and "cadence" not in result:
-                if result["power"] <= 0:
-                    result = {**result, "cadence": 0}
-                    self._clear_last_cadence(address)
-                    self._record_cadence_source(address, "ftms_stop", 0)
+                retained = self._recent_cadence(
+                    address,
+                    ("ftms", "csc", "power_crank", "power_wheel_qz"),
+                    max_age_seconds=CADENCE_RETENTION_SECONDS,
+                )
+                if retained is not None:
+                    result = {**result, "cadence": retained}
                 else:
-                    retained = self._recent_cadence(
+                    self._log_missing_cadence(
                         address,
-                        ("ftms", "csc", "power_crank", "power_wheel_qz"),
-                        max_age_seconds=CADENCE_RETENTION_SECONDS,
+                        "ftms",
+                        "",
+                        measurement.flags,
+                        has_instant_cadence=measurement.has_instant_cadence,
+                        has_average_cadence=measurement.has_average_cadence,
+                        has_crank_data=False,
+                        has_wheel_data=False,
+                        truncated=measurement.truncated,
                     )
-                    if retained is not None:
-                        result = {**result, "cadence": retained}
-                    else:
-                        self._log_missing_cadence(
-                            address,
-                            "ftms",
-                            "",
-                            measurement.flags,
-                            has_instant_cadence=measurement.has_instant_cadence,
-                            has_average_cadence=measurement.has_average_cadence,
-                            has_crank_data=False,
-                            has_wheel_data=False,
-                            truncated=measurement.truncated,
-                        )
             if result:
                 self.sensor_data_changed.emit(address, result)
 

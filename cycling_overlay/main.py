@@ -29,7 +29,11 @@ class CyclingOverlayApp:
         self.workout_engine = WorkoutEngine()
         self.sensor_reader = SensorReader()
 
-        self.overlay = OverlayWindow(language=self.config.ui_language)
+        self.overlay = OverlayWindow(
+            language=self.config.ui_language,
+            on_skip_forward=self.workout_engine.skip_forward,
+            on_skip_backward=self.workout_engine.skip_backward,
+        )
         self.main_window = MainWindow(self.config, self.sensor_reader)
         self.main_window.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -49,6 +53,8 @@ class CyclingOverlayApp:
         self.workout_engine.interval_changed.connect(self._on_interval_changed)
         self.workout_engine.progress_tick.connect(self._on_progress_tick)
         self.workout_engine.state_changed.connect(self._on_engine_state_changed)
+
+        mw._workout_loader.start_requested.connect(self._on_start)
 
     def _on_start(self) -> None:
         self._start_workout()

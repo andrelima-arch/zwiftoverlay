@@ -164,9 +164,13 @@ Sprint 10s 150% (373w) 110rpm
 Cooldown
 9m ramp 65-45% (161-112w) 85rpm"""
         w_text = parse_workout_text(text, ftp=250)
-        assert len(w_text.intervals) == 4
+        assert len(w_text.intervals) == 14
         assert w_text.intervals[0].name == "Warmup"
         assert w_text.intervals[0].type == "ramp"
         assert w_text.intervals[1].repeat_total == 6
+        assert w_text.intervals[1].repeat_index == 1
+        assert w_text.intervals[2].repeat_total == 6
+        assert w_text.intervals[2].repeat_index == 1
+        assert w_text.intervals[2].name == "Sprint"
         expanded = w_text.expanded_intervals()
         assert len(expanded) == 14

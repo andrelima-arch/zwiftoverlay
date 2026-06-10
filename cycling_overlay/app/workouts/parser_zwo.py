@@ -72,26 +72,29 @@ def _parse_intervals_t(node: ET.Element, ftp: int | None) -> list[WorkoutInterva
     cadence_rest = _int_attr(node, "CadenceRest", cadence)
 
     intervals: list[WorkoutInterval] = []
-    if on_duration > 0:
-        intervals.append(WorkoutInterval(
-            name=_attr(node, "Name") or "Interval",
-            duration_seconds=on_duration,
-            power_min=on_power,
-            power_max=on_power,
-            cadence_target=cadence,
-            type="steady",
-            repeat_total=repeat,
-        ))
-    if off_duration > 0:
-        intervals.append(WorkoutInterval(
-            name="Recovery",
-            duration_seconds=off_duration,
-            power_min=off_power,
-            power_max=off_power,
-            cadence_target=cadence_rest,
-            type="recovery",
-            repeat_total=repeat,
-        ))
+    for i in range(repeat):
+        if on_duration > 0:
+            intervals.append(WorkoutInterval(
+                name=_attr(node, "Name") or "Interval",
+                duration_seconds=on_duration,
+                power_min=on_power,
+                power_max=on_power,
+                cadence_target=cadence,
+                type="steady",
+                repeat_total=repeat if repeat > 1 else None,
+                repeat_index=i + 1 if repeat > 1 else None,
+            ))
+        if off_duration > 0:
+            intervals.append(WorkoutInterval(
+                name="Recovery",
+                duration_seconds=off_duration,
+                power_min=off_power,
+                power_max=off_power,
+                cadence_target=cadence_rest,
+                type="recovery",
+                repeat_total=repeat if repeat > 1 else None,
+                repeat_index=i + 1 if repeat > 1 else None,
+            ))
     return intervals
 
 

@@ -199,15 +199,14 @@ class TestWorkoutInterval:
 
 
 class TestWorkoutExpansion:
-    def test_expand_repeats(self):
+    def test_expanded_returns_intervals_as_is(self):
         w = Workout(title="T", intervals=[
-            WorkoutInterval(name="E", duration_seconds=60, power_min=161, power_max=186, repeat_total=3),
+            WorkoutInterval(name="E", duration_seconds=60, power_min=161, power_max=186, repeat_total=3, repeat_index=1),
         ])
         expanded = w.expanded_intervals()
-        assert len(expanded) == 3
+        assert len(expanded) == 1
         assert expanded[0].repeat_index == 1
-        assert expanded[1].repeat_index == 2
-        assert expanded[2].repeat_index == 3
+        assert expanded[0].repeat_total == 3
 
     def test_no_repeat(self):
         w = Workout(title="T", intervals=[
@@ -217,10 +216,11 @@ class TestWorkoutExpansion:
         assert len(expanded) == 1
         assert expanded[0].repeat_index is None
 
-    def test_mixed_repeat_and_single(self):
+    def test_multiple_intervals_preserved(self):
         w = Workout(title="T", intervals=[
             WorkoutInterval(name="W", duration_seconds=120),
-            WorkoutInterval(name="E", duration_seconds=60, repeat_total=2),
+            WorkoutInterval(name="E", duration_seconds=60, repeat_total=2, repeat_index=1),
+            WorkoutInterval(name="C", duration_seconds=120),
         ])
         expanded = w.expanded_intervals()
         assert len(expanded) == 3
@@ -417,9 +417,11 @@ Sprint 10s 150% (373w) 110rpm
 Cooldown
 9m ramp 65-45% (161-112w) 85rpm"""
         w = parse_workout_text(text, ftp=250)
-        assert len(w.intervals) == 3
+        assert len(w.intervals) == 13
         assert w.intervals[0].repeat_total == 6
+        assert w.intervals[0].repeat_index == 1
         assert w.intervals[1].repeat_total == 6
+        assert w.intervals[1].repeat_index == 1
 
     def test_parse_full_workout(self):
         text = """Warmup

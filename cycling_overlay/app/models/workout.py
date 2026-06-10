@@ -41,14 +41,4 @@ class Workout(BaseModel):
     intervals: list[WorkoutInterval] = []
 
     def expanded_intervals(self) -> list[WorkoutInterval]:
-        result: list[WorkoutInterval] = []
-        for interval in self.intervals:
-            if interval.repeat_total and interval.repeat_total > 1:
-                for i in range(interval.repeat_total):
-                    result.append(interval.model_copy(update={
-                        "repeat_index": i + 1,
-                        "repeat_total": interval.repeat_total,
-                    }))
-            else:
-                result.append(interval)
-        return result
+        return list(self.intervals)

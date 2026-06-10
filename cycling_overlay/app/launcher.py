@@ -192,7 +192,7 @@ def verify_installation(gui=False):
 
 def create_desktop_shortcut():
     if sys.platform != "win32":
-        print(f"\nAtalho no desktop só é criado no Windows.")
+        print("\nAtalho no desktop só é criado no Windows.")
         print(f"No Linux/macOS, execute: python3 {os.path.join(SCRIPT_DIR, 'run.pyw')}")
         return
 
@@ -215,7 +215,7 @@ def create_desktop_shortcut():
         )
         with open(shortcut_path, "w", encoding="utf-8") as f:
             f.write(shortcut_content)
-        print(f"\nAtalho criado no Desktop: Cycling Overlay.lnk")
+        print("\nAtalho criado no Desktop: Cycling Overlay.lnk")
     except Exception as e:
         print(f"\nNão foi possível criar atalho: {e}")
         print(f"Para abrir o app, execute: pythonw {run_pyw}")

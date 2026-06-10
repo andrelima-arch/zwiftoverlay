@@ -46,7 +46,7 @@ class IntervalsIcuClient:
     def get_events(self, days_ahead: int = 7, days_back: int = 1) -> list[dict]:
         oldest = (date.today() - timedelta(days=days_back)).isoformat()
         newest = (date.today() + timedelta(days=days_ahead)).isoformat()
-        url = f"{BASE_URL}/athlete/{self._athlete_id}/events"
+        url = f"{BASE_URL}/athlete/{self._athlete_id}/events.json"
         params = {"oldest": oldest, "newest": newest}
         try:
             response = self._session.get(url, params=params, timeout=10)

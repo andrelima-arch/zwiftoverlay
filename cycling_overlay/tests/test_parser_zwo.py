@@ -22,7 +22,7 @@ def test_parse_zwo_common_blocks(tmp_path):
     workout = parse_zwo_file(path, ftp=250)
 
     assert workout.title == "ZWO Test"
-    assert len(workout.intervals) == 6
+    assert len(workout.intervals) == 10
     assert workout.intervals[0].name == "Warmup"
     assert workout.intervals[0].type == "ramp"
     assert workout.intervals[0].power_min == 125
@@ -30,12 +30,14 @@ def test_parse_zwo_common_blocks(tmp_path):
     assert workout.intervals[1].name == "Long aerobic text"
     assert workout.intervals[1].power_min == 200
     assert workout.intervals[2].repeat_total == 3
+    assert workout.intervals[2].repeat_index == 1
     assert workout.intervals[2].power_max == 300
     assert workout.intervals[3].name == "Recovery"
     assert workout.intervals[3].type == "recovery"
-    assert workout.intervals[4].name == "Cooldown"
-    assert workout.intervals[5].name == "Free Ride"
-    assert workout.intervals[5].power_min is None
+    assert workout.intervals[3].repeat_index == 1
+    assert workout.intervals[8].name == "Cooldown"
+    assert workout.intervals[9].name == "Free Ride"
+    assert workout.intervals[9].power_min is None
 
 
 def test_find_zwo_files_sorted_recursively(tmp_path):

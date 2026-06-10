@@ -169,6 +169,25 @@ class WorkoutEngine:
     def _has_next_interval(self) -> bool:
         return self._current_index + 1 < len(self._expanded)
 
+    def skip_forward(self) -> None:
+        if self._state in (EngineState.IDLE, EngineState.FINISHED):
+            return
+        if not self._expanded:
+            return
+        self._advance_interval()
+        self._set_state(EngineState.RUNNING)
+
+    def skip_backward(self) -> None:
+        if self._state in (EngineState.IDLE, EngineState.FINISHED):
+            return
+        if not self._expanded or self._current_index <= 0:
+            return
+        self._current_index -= 1
+        self._elapsed_in_interval = 0
+        self._stopped_seconds = 0
+        self._set_state(EngineState.RUNNING)
+        self._emit_interval()
+
     def _advance_interval(self) -> None:
         self._current_index += 1
         self._elapsed_in_interval = 0

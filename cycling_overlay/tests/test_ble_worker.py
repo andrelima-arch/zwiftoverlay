@@ -770,7 +770,7 @@ def test_power_measurement_flags_0034_uses_qz_wheel_when_crank_is_zero():
     assert data == [{"power": 200}, {"power": 205, "cadence": 60}]
 
 
-def test_power_measurement_zero_power_clears_retained_cadence():
+def test_power_measurement_retains_cadence_on_zero_power():
     worker = BleWorker()
     client = NotifyClient()
     data = _collect_sensor_data(worker)
@@ -809,7 +809,7 @@ def test_power_measurement_zero_power_clears_retained_cadence():
     client.handler(None, bytearray(moving))
     client.handler(None, bytearray(stopped))
 
-    assert data == [{"power": 200}, {"power": 205, "cadence": 60}, {"power": 0, "cadence": 0}]
+    assert data == [{"power": 200}, {"power": 205, "cadence": 60}, {"power": 0, "cadence": 60}]
 
 
 def test_power_measurement_logs_missing_cadence_diagnostic(caplog):

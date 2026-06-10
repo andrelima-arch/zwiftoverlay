@@ -41,9 +41,7 @@ def parse_workout_text(text: str, ftp: int | None = None) -> Workout:
 
         if is_section_header:
             if repeat_buffer and repeat_total:
-                for buf in repeat_buffer:
-                    buf.repeat_total = repeat_total
-                intervals.extend(repeat_buffer)
+                intervals.extend(_expand_cycle(repeat_buffer, repeat_total))
                 repeat_buffer = []
                 repeat_total = None
 
@@ -54,9 +52,7 @@ def parse_workout_text(text: str, ftp: int | None = None) -> Workout:
                 repeat_in_line = re.search(r"(\d+)\s*[x\u00d7]", line)
                 if repeat_in_line:
                     if repeat_buffer and repeat_total:
-                        for buf in repeat_buffer:
-                            buf.repeat_total = repeat_total
-                        intervals.extend(repeat_buffer)
+                        intervals.extend(_expand_cycle(repeat_buffer, repeat_total))
                         repeat_buffer = []
                     repeat_total = int(repeat_in_line.group(1))
                     i += 1
@@ -109,14 +105,23 @@ def parse_workout_text(text: str, ftp: int | None = None) -> Workout:
         i += 1
 
     if repeat_buffer and repeat_total:
-        for buf in repeat_buffer:
-            buf.repeat_total = repeat_total
-        intervals.extend(repeat_buffer)
+        intervals.extend(_expand_cycle(repeat_buffer, repeat_total))
 
     if not title and intervals:
         title = "Treino importado"
 
     return Workout(title=title, intervals=intervals)
+
+
+def _expand_cycle(buffer: list[WorkoutInterval], repeat_total: int) -> list[WorkoutInterval]:
+    result: list[WorkoutInterval] = []
+    for i in range(repeat_total):
+        for interval in buffer:
+            result.append(interval.model_copy(update={
+                "repeat_total": repeat_total,
+                "repeat_index": i + 1,
+            }))
+    return result
 
 
 def _match_block_header(line: str) -> tuple[str, str] | None:

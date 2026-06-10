@@ -2,10 +2,6 @@ import logging
 from dataclasses import dataclass
 
 from app.sensors.compatibility import (
-    CSC_SERVICE_UUID,
-    FTMS_SERVICE_UUID,
-    HR_SERVICE_UUID,
-    POWER_SERVICE_UUID,
     detect_compatibility,
 )
 
